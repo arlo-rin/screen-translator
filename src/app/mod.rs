@@ -102,6 +102,8 @@ pub struct App {
     update: SharedUpdate,
     ai_test: Arc<Mutex<Option<String>>>,
     ai_test_running: bool,
+    aliyun_test: Arc<Mutex<Option<String>>>,
+    aliyun_test_running: bool,
     /// Last value handed to the tray, so the animation is only poked on a change.
     tray_busy: bool,
 
@@ -172,6 +174,8 @@ impl App {
             update,
             ai_test: Arc::new(Mutex::new(None)),
             ai_test_running: false,
+            aliyun_test: Arc::new(Mutex::new(None)),
+            aliyun_test_running: false,
             tray_busy: false,
             #[cfg(debug_assertions)]
             script: automation::Script::from_env(),
@@ -396,6 +400,12 @@ impl App {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
             .unwrap_or_default();
+        let aliyun_status = self
+            .aliyun_test
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_default();
         let rejected = self.hotkeys.rejected();
         let quiet = stays_in_background();
 
@@ -438,6 +448,8 @@ impl App {
                         update_progress: update.progress,
                         ai_test_status: &ai_status,
                         ai_test_running: self.ai_test_running,
+                        aliyun_test_status: &aliyun_status,
+                        aliyun_test_running: self.aliyun_test_running,
                         rejected_hotkeys: &rejected,
                         log_dir: logging::default_log_dir(),
                         history: &self.history,
@@ -555,6 +567,9 @@ impl App {
         if out.test_ai && !self.ai_test_running {
             self.start_ai_test(ctx);
         }
+        if out.test_aliyun && !self.aliyun_test_running {
+            self.start_aliyun_test(ctx);
+        }
         if out.show_sample {
             self.show_sample(ctx);
         }
@@ -583,13 +598,53 @@ impl App {
                 },
             };
             let msg = match ai::translate(&req, &cfg).await {
-                Ok(reply) => t("✓ Got a reply: {reply}")
-                    .replace("{reply}", logging::clip(reply.trim(), 60)),
+                Ok(reply) => {
+                    t("✓ Got a reply: {reply}").replace("{reply}", logging::clip(reply.trim(), 60))
+                }
                 Err(e) => format!("✗ {}", e.user_message()),
             };
             *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(msg);
             repaint.request_repaint();
         });
+    }
+
+    fn start_aliyun_test(&mut self, ctx: &Context) {
+        self.aliyun_test_running = true;
+        *self.aliyun_test.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(t("Checking…").to_string());
+
+        let cfg = self.settings.engines.aliyun_config.clone();
+        let target = self.settings.target_lang;
+        let slot = Arc::clone(&self.aliyun_test);
+        let repaint = ctx.clone();
+
+        self.rt.spawn(async move {
+            use crate::features::translation::providers::aliyun;
+
+            let msg = match aliyun::test_connection(&cfg, target).await {
+                Ok(reply) => {
+                    t("✓ Got a reply: {reply}").replace("{reply}", logging::clip(reply.trim(), 60))
+                }
+                Err(e) => format!("✗ {}", e.user_message()),
+            };
+            *slot.lock().unwrap_or_else(|p| p.into_inner()) = Some(msg);
+            repaint.request_repaint();
+        });
+    }
+
+    fn poll_aliyun_test(&mut self) {
+        if !self.aliyun_test_running {
+            return;
+        }
+        let done = self
+            .aliyun_test
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_deref()
+            .is_some_and(|s| s != t("Checking…"));
+        if done {
+            self.aliyun_test_running = false;
+        }
     }
 
     fn poll_ai_test(&mut self) {
@@ -633,6 +688,7 @@ impl App {
         let moving = self.overlay.is_some()
             || self.pending.is_some()
             || self.ai_test_running
+            || self.aliyun_test_running
             || self.result.as_ref().is_some_and(ResultUi::is_animating);
 
         let interval = if moving {
@@ -673,6 +729,7 @@ impl eframe::App for App {
         self.run_pending(ctx);
         self.tick_watch(ctx);
         self.poll_ai_test();
+        self.poll_aliyun_test();
         self.sync_tray_activity(ctx);
         self.announce_update();
         self.restart_if_updated(ctx);

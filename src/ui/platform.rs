@@ -9,8 +9,8 @@
 //! frameless group per section with faint dividers inside it. That is a
 //! deliberate departure, applied identically on both platforms.
 
-use crate::shared::i18n::t;
 use crate::entities::settings::{MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN};
+use crate::shared::i18n::t;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
@@ -35,6 +35,193 @@ pub enum CaptionStyle {
     /// Windows: minimise and close glyphs, top right.
     Buttons,
 }
+
+/// A named face inside a system font file.
+///
+/// CJK fonts are shipped as collections, and the first face is usually a
+/// document face whose metrics do not match the Latin UI font. [`Self::name`]
+/// is looked up in the file so we load the UI face; if that name is not
+/// present the candidate is skipped, rather than silently taking italic or a
+/// body face. An empty name means "use face 0", for single-face files whose
+/// typographic name we do not rely on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontFace {
+    pub path: &'static str,
+    pub name: &'static str,
+}
+
+const fn face(path: &'static str, name: &'static str) -> FontFace {
+    FontFace { path, name }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+const LINUX_LATIN_UI: &[FontFace] = &[
+    face(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "DejaVu Sans",
+    ),
+    face(
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "Liberation Sans",
+    ),
+    face("/usr/share/fonts/noto/NotoSans-Regular.ttf", "Noto Sans"),
+    face("/usr/share/fonts/TTF/DejaVuSans.ttf", "DejaVu Sans"),
+    face("/usr/share/fonts/gnu-free/FreeSans.otf", "FreeSans"),
+];
+
+const WINDOWS_LATIN_UI: &[FontFace] = &[
+    face(r"C:\Windows\Fonts\segoeui.ttf", "Segoe UI"),
+    face(r"C:\Windows\Fonts\SegUIVar.ttf", "Segoe UI Variable"),
+    face(r"C:\Windows\Fonts\tahoma.ttf", "Tahoma"),
+];
+
+const MACOS_LATIN_UI: &[FontFace] = &[
+    face("/System/Library/Fonts/SFNS.ttf", ""),
+    face("/System/Library/Fonts/SFNSText.ttf", ""),
+    face("/System/Library/Fonts/Helvetica.ttc", "Helvetica"),
+];
+
+#[cfg(all(unix, not(target_os = "macos")))]
+const LINUX_MONO: &[FontFace] = &[
+    face(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "DejaVu Sans Mono",
+    ),
+    face(
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        "Liberation Mono",
+    ),
+    face(
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+        "DejaVu Sans Mono",
+    ),
+];
+
+const WINDOWS_MONO: &[FontFace] = &[
+    face(r"C:\Windows\Fonts\consola.ttf", "Consolas"),
+    face(r"C:\Windows\Fonts\cour.ttf", "Courier New"),
+];
+
+const MACOS_MONO: &[FontFace] = &[
+    face("/System/Library/Fonts/SFNSMono.ttf", ""),
+    face("/System/Library/Fonts/Menlo.ttc", "Menlo"),
+];
+
+#[cfg(all(unix, not(target_os = "macos")))]
+const LINUX_CHINESE_UI: &[FontFace] = &[
+    face(
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK SC",
+    ),
+    face(
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK SC",
+    ),
+    face(
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK SC",
+    ),
+    face(
+        "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+        "Noto Sans CJK SC",
+    ),
+    face(
+        "/usr/share/fonts/truetype/noto-cjk/NotoSansCJKsc-Regular.otf",
+        "Noto Sans CJK SC",
+    ),
+    face(
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "WenQuanYi Micro Hei",
+    ),
+];
+
+const WINDOWS_CHINESE_UI: &[FontFace] = &[
+    face(r"C:\Windows\Fonts\msyh.ttc", "Microsoft YaHei UI"),
+    face(r"C:\Windows\Fonts\msyh.ttc", "Microsoft YaHei"),
+    face(r"C:\Windows\Fonts\msjh.ttc", "Microsoft JhengHei UI"),
+    face(r"C:\Windows\Fonts\msjh.ttc", "Microsoft JhengHei"),
+    face(r"C:\Windows\Fonts\Deng.ttf", "DengXian"),
+];
+
+const MACOS_CHINESE_UI: &[FontFace] = &[
+    face("/System/Library/Fonts/PingFang.ttc", "PingFang SC"),
+    face(
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "Hiragino Sans GB",
+    ),
+];
+
+#[cfg(all(unix, not(target_os = "macos")))]
+const LINUX_JAPANESE_UI: &[FontFace] = &[
+    face(
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK JP",
+    ),
+    face(
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK JP",
+    ),
+    face(
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK JP",
+    ),
+    face(
+        "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
+        "Noto Sans CJK JP",
+    ),
+];
+
+const WINDOWS_JAPANESE_UI: &[FontFace] = &[
+    face(r"C:\Windows\Fonts\YuGothM.ttc", "Yu Gothic UI"),
+    face(r"C:\Windows\Fonts\meiryo.ttc", "Meiryo UI"),
+    face(r"C:\Windows\Fonts\YuGothR.ttc", "Yu Gothic UI Semilight"),
+    face(r"C:\Windows\Fonts\YuGothM.ttc", "Yu Gothic Medium"),
+    face(r"C:\Windows\Fonts\YuGothR.ttc", "Yu Gothic Regular"),
+    face(r"C:\Windows\Fonts\meiryo.ttc", "Meiryo"),
+    face(r"C:\Windows\Fonts\msgothic.ttc", "MS UI Gothic"),
+];
+
+const MACOS_JAPANESE_UI: &[FontFace] = &[
+    face(
+        "/System/Library/Fonts/Hiragino Sans W3.ttc",
+        "Hiragino Sans",
+    ),
+    face(
+        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "Hiragino Sans",
+    ),
+    face(
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "Hiragino Sans GB",
+    ),
+];
+
+#[cfg(all(unix, not(target_os = "macos")))]
+const LINUX_KOREAN_UI: &[FontFace] = &[
+    face(
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK KR",
+    ),
+    face(
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK KR",
+    ),
+    face(
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "Noto Sans CJK KR",
+    ),
+    face(
+        "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Regular.otf",
+        "Noto Sans CJK KR",
+    ),
+];
+
+const WINDOWS_KOREAN_UI: &[FontFace] = &[face(r"C:\Windows\Fonts\malgun.ttf", "Malgun Gothic")];
+
+const MACOS_KOREAN_UI: &[FontFace] = &[face(
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    "Apple SD Gothic Neo",
+)];
 
 impl Platform {
     pub const fn current() -> Self {
@@ -139,89 +326,77 @@ impl Platform {
         t("Space")
     }
 
-    /// Candidate UI font files, best first. Missing files are skipped.
+    /// Latin / Cyrillic UI face, best first. Missing files are skipped.
     ///
-    /// Linux borrows the Fluent look — there is no third round of the design —
-    /// but not the font paths, which would all be `C:\Windows\Fonts`. Falling
-    /// through to egui's built-in face would cost the app every CJK glyph, and
-    /// CJK is most of what it is asked to translate.
-    pub const fn ui_font_candidates(self) -> &'static [&'static str] {
+    /// Segoe UI is preferred over Segoe UI Variable: both report the same typo
+    /// metrics, but the variable font is a poorer match for egui's loader, and
+    /// the classic face is what Microsoft YaHei UI was designed to sit next to.
+    pub const fn latin_ui_fonts(self) -> &'static [FontFace] {
         #[cfg(all(unix, not(target_os = "macos")))]
-        return &[
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans.ttf",
-            "/usr/share/fonts/gnu-free/FreeSans.otf",
-        ];
+        return LINUX_LATIN_UI;
 
         #[allow(unreachable_code)]
         match self {
-            Platform::Windows => &[
-                r"C:\Windows\Fonts\SegUIVar.ttf",
-                r"C:\Windows\Fonts\segoeui.ttf",
-                r"C:\Windows\Fonts\tahoma.ttf",
-            ],
-            Platform::MacOs => &[
-                "/System/Library/Fonts/SFNS.ttf",
-                "/System/Library/Fonts/SFNSText.ttf",
-                "/System/Library/Fonts/Helvetica.ttc",
-            ],
+            Platform::Windows => WINDOWS_LATIN_UI,
+            Platform::MacOs => MACOS_LATIN_UI,
         }
     }
 
     /// Monospace face for key badges and size labels.
-    pub const fn mono_font_candidates(self) -> &'static [&'static str] {
+    pub const fn mono_fonts(self) -> &'static [FontFace] {
         #[cfg(all(unix, not(target_os = "macos")))]
-        return &[
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-            "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-        ];
+        return LINUX_MONO;
 
         #[allow(unreachable_code)]
         match self {
-            Platform::Windows => &[
-                r"C:\Windows\Fonts\consola.ttf",
-                r"C:\Windows\Fonts\cour.ttf",
-            ],
-            Platform::MacOs => &[
-                "/System/Library/Fonts/SFNSMono.ttf",
-                "/System/Library/Fonts/Menlo.ttc",
-            ],
+            Platform::Windows => WINDOWS_MONO,
+            Platform::MacOs => MACOS_MONO,
         }
     }
 
-    /// Candidate CJK fallbacks. The second element compensates for these fonts
-    /// reporting a taller ascent than the Latin face, which otherwise makes
-    /// kana float above the baseline inside a mixed run.
-    pub const fn cjk_font_candidates(self) -> &'static [(&'static str, f32)] {
+    /// Chinese UI faces, best first.
+    ///
+    /// Microsoft YaHei UI (and PingFang SC, Noto Sans CJK SC) include Latin
+    /// glyphs with the same body as the hanzi, so a mixed label such as
+    /// "登录 Windows 时启动" stays on one baseline. The document faces
+    /// (plain YaHei, JhengHei) are only reached when the UI face is missing.
+    pub const fn chinese_ui_fonts(self) -> &'static [FontFace] {
         #[cfg(all(unix, not(target_os = "macos")))]
-        return &[
-            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0.10),
-            ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 0.10),
-            ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0.10),
-            ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0.10),
-        ];
+        return LINUX_CHINESE_UI;
 
         #[allow(unreachable_code)]
         match self {
-            Platform::Windows => &[
-                (r"C:\Windows\Fonts\meiryo.ttc", 0.15),
-                (r"C:\Windows\Fonts\YuGothR.ttc", 0.10),
-                (r"C:\Windows\Fonts\YuGothM.ttc", 0.10),
-                (r"C:\Windows\Fonts\msgothic.ttc", 0.10),
-                // Simplified Chinese and Korean, for the interface language as
-                // much as for translated text: neither is covered by the
-                // Japanese faces above.
-                (r"C:\Windows\Fonts\msyh.ttc", 0.10),
-                (r"C:\Windows\Fonts\malgun.ttf", 0.10),
-            ],
-            Platform::MacOs => &[
-                ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0.06),
-                ("/System/Library/Fonts/PingFang.ttc", 0.06),
-                ("/System/Library/Fonts/AppleSDGothicNeo.ttc", 0.06),
-            ],
+            Platform::Windows => WINDOWS_CHINESE_UI,
+            Platform::MacOs => MACOS_CHINESE_UI,
+        }
+    }
+
+    /// Japanese UI faces, best first.
+    ///
+    /// Yu Gothic UI Regular shares typo metrics with Segoe UI, unlike Yu
+    /// Gothic Regular, which reports a 1024-unit line gap and is what the
+    /// stack used to pick as the first available CJK face on Chinese Windows
+    /// (Meiryo is often not installed there).
+    pub const fn japanese_ui_fonts(self) -> &'static [FontFace] {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        return LINUX_JAPANESE_UI;
+
+        #[allow(unreachable_code)]
+        match self {
+            Platform::Windows => WINDOWS_JAPANESE_UI,
+            Platform::MacOs => MACOS_JAPANESE_UI,
+        }
+    }
+
+    /// Korean UI faces, best first.
+    pub const fn korean_ui_fonts(self) -> &'static [FontFace] {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        return LINUX_KOREAN_UI;
+
+        #[allow(unreachable_code)]
+        match self {
+            Platform::Windows => WINDOWS_KOREAN_UI,
+            Platform::MacOs => MACOS_KOREAN_UI,
         }
     }
 }
@@ -308,5 +483,49 @@ mod tests {
         assert_ne!(w.row_subtitles, m.row_subtitles);
         assert_ne!(w.nav_search, m.nav_search);
         assert_ne!(w.toggle_dim_knob_when_off, m.toggle_dim_knob_when_off);
+    }
+
+    #[test]
+    fn windows_chinese_ui_fonts_start_with_yahei_ui() {
+        let fonts = Platform::Windows.chinese_ui_fonts();
+        assert_eq!(
+            fonts[0],
+            face(r"C:\Windows\Fonts\msyh.ttc", "Microsoft YaHei UI")
+        );
+        assert!(fonts.iter().any(|f| f.name == "Microsoft JhengHei UI"));
+        // Document faces come after their UI counterparts, never first.
+        let ui = fonts
+            .iter()
+            .position(|f| f.name == "Microsoft YaHei UI")
+            .unwrap();
+        let body = fonts
+            .iter()
+            .position(|f| f.name == "Microsoft YaHei")
+            .unwrap();
+        assert!(ui < body);
+    }
+
+    #[test]
+    fn windows_latin_prefers_classic_segoe_over_the_variable_font() {
+        let fonts = Platform::Windows.latin_ui_fonts();
+        assert_eq!(fonts[0].name, "Segoe UI");
+        assert!(fonts.iter().any(|f| f.name == "Segoe UI Variable"));
+    }
+
+    #[test]
+    fn windows_japanese_prefers_yu_gothic_ui_over_the_document_face() {
+        let fonts = Platform::Windows.japanese_ui_fonts();
+        assert_eq!(fonts[0].name, "Yu Gothic UI");
+        let ui = fonts.iter().position(|f| f.name == "Yu Gothic UI").unwrap();
+        let body = fonts
+            .iter()
+            .position(|f| f.name == "Yu Gothic Regular")
+            .unwrap();
+        assert!(ui < body);
+    }
+
+    #[test]
+    fn windows_korean_uses_malgun_gothic() {
+        assert_eq!(Platform::Windows.korean_ui_fonts()[0].name, "Malgun Gothic");
     }
 }

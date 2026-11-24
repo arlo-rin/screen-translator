@@ -17,8 +17,9 @@
 use egui::{Color32, Context, FontData, FontDefinitions, FontFamily, Rounding, Stroke, Visuals};
 use tracing::debug;
 
-use crate::shared::i18n::t;
-use super::platform::{Metrics, Platform};
+use crate::shared::i18n::{self, t, Lang};
+
+use super::platform::{FontFace, Metrics, Platform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ThemeMode {
@@ -143,12 +144,7 @@ pub fn wash(r: u8, g: u8, b: u8, alpha: u8) -> Color32 {
     fn scaled(value: u8, alpha: u8) -> u8 {
         ((value as u16 * alpha as u16 + 127) / 255) as u8
     }
-    Color32::from_rgba_premultiplied(
-        scaled(r, alpha),
-        scaled(g, alpha),
-        scaled(b, alpha),
-        alpha,
-    )
+    Color32::from_rgba_premultiplied(scaled(r, alpha), scaled(g, alpha), scaled(b, alpha), alpha)
 }
 
 impl Theme {
@@ -448,91 +444,105 @@ impl Theme {
 
 // ── Fonts ────────────────────────────────────────────────────────────────────
 
-/// Builds the font stack: native UI face first so the app looks like it belongs
-/// on the platform, then egui's bundled faces, then CJK, then emoji.
+/// Builds the font stack for the current interface language.
 ///
-/// Order matters — egui walks the family list until a face has the glyph, so a
-/// missing Cyrillic or kana character falls through instead of rendering tofu.
+/// When the interface is Chinese, Japanese or Korean, the matching CJK *UI*
+/// face goes first so hanzi/kana/hangul and the Latin mixed into the same
+/// label (a product name, "Windows", a file size) share one body and one
+/// baseline. Latin and Cyrillic interfaces keep the platform UI face first —
+/// putting a CJK face in front is how "Русский" in the language list ended
+/// up spaced like a ransom note, because those faces often carry full-width
+/// Cyrillic.
+///
+/// CJK collections are asked for their UI face by name (Microsoft YaHei UI,
+/// Yu Gothic UI, …), not for index 0. Index 0 is the document face: Yu
+/// Gothic Regular reports a 1024-unit line gap, and the old stack applied a
+/// downward `y_offset_factor` of 0.10–0.15 to compensate, which is what made
+/// mixed labels look as if the characters were jumping up and down. UI faces
+/// are used at their native metrics; no vertical tweak is applied.
 pub fn build_fonts() -> FontDefinitions {
     let platform = Platform::current();
+    let lang = i18n::current();
     let mut fonts = FontDefinitions::default();
 
-    if let Some((name, data)) = load_first(platform.ui_font_candidates()) {
-        debug!(font = %name, "UI font loaded");
-        fonts.font_data.insert("ui".to_owned(), data);
-    }
-    if let Some((name, data)) = load_first(platform.mono_font_candidates()) {
-        debug!(font = %name, "Monospace font loaded");
-        fonts.font_data.insert("mono".to_owned(), data);
-    }
-    // Every face we can find, not the first one: no single CJK font covers
-    // Japanese, Chinese *and* Korean. Loading only the first meant a Korean
-    // interface rendered as a window full of tofu, because the Japanese face
-    // that happened to be first has no hangul in it.
-    let cjk: Vec<String> = load_all_weighted(platform.cjk_font_candidates())
-        .into_iter()
-        .enumerate()
-        .map(|(i, (name, data))| {
-            let key = format!("cjk{i}");
-            debug!(font = %name, "CJK fallback loaded");
+    let mut loaded = Vec::new();
+    for face in faces_for(platform, lang) {
+        if let Some((key, data, label)) = load_face(face) {
+            if fonts.font_data.contains_key(&key) {
+                continue;
+            }
+            debug!(font = %label, path = %face.path, "font face loaded");
             fonts.font_data.insert(key.clone(), data);
-            key
-        })
-        .collect();
+            loaded.push(key);
+        }
+    }
 
-    let has_ui = fonts.font_data.contains_key("ui");
-    let has_mono = fonts.font_data.contains_key("mono");
+    let mut mono_keys = Vec::new();
+    for face in platform.mono_fonts().iter().copied() {
+        if let Some((key, data, label)) = load_face(face) {
+            if fonts.font_data.contains_key(&key) {
+                continue;
+            }
+            debug!(font = %label, path = %face.path, "Monospace font loaded");
+            fonts.font_data.insert(key.clone(), data);
+            mono_keys.push(key);
+        }
+    }
 
     let prop = fonts.families.entry(FontFamily::Proportional).or_default();
-    if has_ui {
-        prop.insert(0, "ui".to_owned());
-    }
-    // Straight after the UI face, ahead of egui's own fallbacks — never in
-    // front of it. egui walks the list per glyph, so Latin and Cyrillic are
-    // served by the UI font and only kana, hanzi and hangul fall through to
-    // these. Putting them first instead renders Cyrillic in full-width CJK
-    // metrics, which is how "Русский" in the language list ends up spaced
-    // out like a ransom note on a Japanese interface.
-    let at = usize::from(has_ui);
-    for (i, key) in cjk.iter().enumerate() {
-        prop.insert(at + i, key.clone());
+    for (i, key) in loaded.iter().enumerate() {
+        prop.insert(i, key.clone());
     }
 
     let mono = fonts.families.entry(FontFamily::Monospace).or_default();
-    if has_mono {
-        mono.insert(0, "mono".to_owned());
+    let mut at = 0;
+    for key in mono_keys.iter().chain(loaded.iter()) {
+        if !mono.contains(key) {
+            mono.insert(at, key.clone());
+            at += 1;
+        }
     }
-    mono.extend(cjk.iter().cloned());
 
     fonts
+}
+
+/// Preferred faces in family order for this platform and interface language.
+///
+/// After the primary face come the other scripts, so a glyph the primary
+/// font does not have (Cyrillic in YaHei, hanzi in Segoe, hangul in either)
+/// falls through instead of rendering tofu.
+fn faces_for(platform: Platform, lang: Lang) -> Vec<FontFace> {
+    let latin = platform.latin_ui_fonts();
+    let zh = platform.chinese_ui_fonts();
+    let ja = platform.japanese_ui_fonts();
+    let ko = platform.korean_ui_fonts();
+    let groups: &[&[FontFace]] = match lang {
+        Lang::Zh => &[zh, latin, ja, ko],
+        Lang::Ja => &[ja, latin, zh, ko],
+        Lang::Ko => &[ko, latin, zh, ja],
+        _ => &[latin, zh, ja, ko],
+    };
+    groups.iter().flat_map(|g| g.iter().copied()).collect()
 }
 
 /// A font file as egui wants it — borrowed, so that it is in memory once and
 /// stays that way however often the stack is rebuilt. See
 /// [`crate::shared::file_bytes`] for what handing egui an owned copy costs.
-fn font_data(path: &str) -> Option<FontData> {
-    crate::shared::file_bytes::forever(path).map(FontData::from_static)
-}
-
-fn load_first(paths: &[&str]) -> Option<(String, FontData)> {
-    paths
-        .iter()
-        .find_map(|path| font_data(path).map(|data| ((*path).to_string(), data)))
-}
-
-/// Every candidate that exists on this machine, in the order given.
 ///
-/// The scripts are split across several files on every platform, so this
-/// takes all of them and lets egui walk the list per glyph.
-fn load_all_weighted(paths: &[(&str, f32)]) -> Vec<(String, FontData)> {
-    let mut loaded = Vec::new();
-    for (path, y_offset) in paths {
-        if let Some(mut fd) = font_data(path) {
-            fd.tweak.y_offset_factor = *y_offset;
-            loaded.push(((*path).to_string(), fd));
-        }
-    }
-    loaded
+/// The key includes the face index, because the same `.ttc` can contribute
+/// more than one face.
+fn load_face(face: FontFace) -> Option<(String, FontData, String)> {
+    let bytes = crate::shared::file_bytes::forever(face.path)?;
+    let index = super::font_face::index_for_candidate(bytes, face.name)?;
+    let mut data = FontData::from_static(bytes);
+    data.index = index;
+    let label = if face.name.is_empty() {
+        format!("{}#{}", face.path, index)
+    } else {
+        format!("{}#{} ({})", face.path, index, face.name)
+    };
+    let key = format!("{}#{}", face.path, index);
+    Some((key, data, label))
 }
 
 /// Type ramp. Kept in one place so a size change lands everywhere at once.

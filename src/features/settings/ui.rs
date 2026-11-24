@@ -15,9 +15,9 @@ use egui::{Color32, Sense, Vec2};
 use crate::entities::history::{History, HistoryEntry};
 use crate::entities::language::Language;
 use crate::entities::settings::{
-    bindable_alone, AiProtocol, AutoHide, EngineKind, Hotkey, HotkeyAction, Recogniser,
-    ResultView, Settings, SubtitlePlace, SubtitleSize, AI_PRESETS, MOD_ALT, MOD_CONTROL,
-    MOD_NOREPEAT, MOD_SHIFT,
+    bindable_alone, AiProtocol, AliyunEndpoint, AutoHide, EngineKind, Hotkey, HotkeyAction,
+    Recogniser, ResultView, Settings, SubtitlePlace, SubtitleSize, AI_PRESETS, MOD_ALT,
+    MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT,
 };
 use crate::features::translation::ocr::local;
 use crate::shared::i18n::{t, Lang};
@@ -88,11 +88,15 @@ impl Section {
     /// Extra words the search should match beyond the visible label.
     fn keywords(self) -> &'static str {
         match self {
-            Section::General => t("autostart clipboard tray icon notifications watch area interval"),
+            Section::General => {
+                t("autostart clipboard tray icon notifications watch area interval")
+            }
             Section::Keys => t("hotkey shortcut keys keyboard tab watch hide repeat"),
             Section::Languages => t("translate language source target"),
-            Section::Engine => t("yandex google deepl ai openai anthropic gemini key token model"),
-            Section::Appearance => t("theme light dark popup window subtitles overlay opacity hide"),
+            Section::Engine => t("yandex google deepl ai openai anthropic gemini key token model aliyun alibaba accesskey"),
+            Section::Appearance => {
+                t("theme light dark popup window subtitles overlay opacity hide")
+            }
             Section::History => t("history translations recent clear memory"),
             Section::Logs => t("log journal debug privacy"),
             Section::About => t("version update license author donate"),
@@ -164,6 +168,8 @@ pub struct SettingsContext<'a> {
     pub update_progress: Option<f32>,
     pub ai_test_status: &'a str,
     pub ai_test_running: bool,
+    pub aliyun_test_status: &'a str,
+    pub aliyun_test_running: bool,
     /// Actions whose shortcut the system refused, each with the
     /// combination still in effect for it, if any.
     pub rejected_hotkeys: &'a [(HotkeyAction, Option<Hotkey>)],
@@ -182,6 +188,7 @@ pub struct SettingsOutput {
     pub check_update: bool,
     pub install_update: bool,
     pub test_ai: bool,
+    pub test_aliyun: bool,
     pub open_log_dir: bool,
     pub clear_history: bool,
     /// Put a sample subtitle on screen.
@@ -194,6 +201,8 @@ pub struct SettingsUi {
     search: String,
     ai_key: String,
     deepl_key: String,
+    aliyun_id: String,
+    aliyun_secret: String,
     reveal_keys: bool,
     synced: bool,
     /// Which history entry is expanded, if any. A capture is often a whole
@@ -219,6 +228,8 @@ impl SettingsUi {
             search: String::new(),
             ai_key: String::new(),
             deepl_key: String::new(),
+            aliyun_id: String::new(),
+            aliyun_secret: String::new(),
             reveal_keys: false,
             synced: false,
             open_entry: None,
@@ -230,16 +241,27 @@ impl SettingsUi {
     pub fn on_open(&mut self, settings: &Settings) {
         self.ai_key = settings.engines.ai_config.api_key.expose().to_string();
         self.deepl_key = settings.engines.deepl_key.expose().to_string();
+        self.aliyun_id = settings.engines.aliyun_config.access_key_id.clone();
+        self.aliyun_secret = settings
+            .engines
+            .aliyun_config
+            .access_key_secret
+            .expose()
+            .to_string();
         self.reveal_keys = false;
         self.recording = None;
         self.synced = true;
     }
 
     pub fn on_close(&mut self) {
+        self.recording = None;
+        crate::features::hotkey::manager::set_recording(false);
         // Do not leave plaintext keys sitting in the UI struct for the rest of
         // the session.
         self.ai_key.clear();
         self.deepl_key.clear();
+        self.aliyun_id.clear();
+        self.aliyun_secret.clear();
         self.synced = false;
     }
 
@@ -348,6 +370,7 @@ impl SettingsUi {
                     });
             });
 
+        crate::features::hotkey::manager::set_recording(self.recording.is_some());
         out
     }
 
@@ -448,13 +471,17 @@ impl SettingsUi {
             // With the icon gone the shortcut is the only way in, so whether
             // there is one decides what the warning has to say.
             let message = if s.hotkeys.region.is_bound() {
-                t("Without the icon this window can only be reopened by starting the app \
-                   with --settings. Capture stays on {hotkey}.")
+                t(
+                    "Without the icon this window can only be reopened by starting the app \
+                   with --settings. Capture stays on {hotkey}.",
+                )
                 .replace("{hotkey}", &s.hotkeys.region.display())
             } else {
-                t("Without the icon this window can only be reopened by starting the app \
+                t(
+                    "Without the icon this window can only be reopened by starting the app \
                    with --settings. No capture shortcut is set either, so nothing would \
-                   start a capture.")
+                   start a capture.",
+                )
                 .to_string()
             };
             notice(ui, theme, theme.warning, &message);
@@ -464,8 +491,10 @@ impl SettingsUi {
                 ui,
                 theme,
                 theme.warning,
-                t("Nothing will happen: the result is neither shown nor copied. \
-                   Turn on copying or pick a way to show the result."),
+                t(
+                    "Nothing will happen: the result is neither shown nor copied. \
+                   Turn on copying or pick a way to show the result.",
+                ),
             );
         }
 
@@ -476,7 +505,9 @@ impl SettingsUi {
                 theme,
                 RowSpec::new(t("Look for new text every"))
                     .icon(icons::eye)
-                    .subtitle(t("A watched area is translated again when its text changes"))
+                    .subtitle(t(
+                        "A watched area is translated again when its text changes",
+                    ))
                     .last(),
                 |ui| {
                     let mut seconds = s.watch_interval_ms as f32 / 1000.0;
@@ -498,8 +529,10 @@ impl SettingsUi {
         hint(
             ui,
             theme,
-            t("Start watching from the tray menu or with its shortcut, select the dialogue box \
-               once, and every new line is translated as it appears. The same shortcut stops it."),
+            t(
+                "Start watching from the tray menu or with its shortcut, select the dialogue box \
+               once, and every new line is translated as it appears. The same shortcut stops it.",
+            ),
         );
     }
 
@@ -555,11 +588,7 @@ impl SettingsUi {
                         if widgets::ghost_button(
                             ui,
                             theme,
-                            if hk.is_bound() {
-                                t("Change")
-                            } else {
-                                t("Set")
-                            },
+                            if hk.is_bound() { t("Change") } else { t("Set") },
                         )
                         .clicked()
                         {
@@ -596,11 +625,15 @@ impl SettingsUi {
             // Only true of a change that was refused. A default that was
             // taken before the app ever ran has nothing before it.
             let message = if standing.is_some() {
-                t("The shortcut for \"{action}\" is taken by another program. \
-                    The previous one still applies.")
+                t(
+                    "The shortcut for \"{action}\" is taken by another program. \
+                    The previous one still applies.",
+                )
             } else {
-                t("The shortcut for \"{action}\" is taken by another program, \
-                    so this action has no shortcut for now. Choose another combination.")
+                t(
+                    "The shortcut for \"{action}\" is taken by another program, \
+                    so this action has no shortcut for now. Choose another combination.",
+                )
             };
             notice(
                 ui,
@@ -641,8 +674,10 @@ impl SettingsUi {
         hint(
             ui,
             theme,
-            t("F1–F12, Insert, Delete, Home, End, Page Up and Page Down can be bound on their \
-               own, without Ctrl, Alt or Shift — handy when both hands are on the game."),
+            t(
+                "F1–F12, Insert, Delete, Home, End, Page Up and Page Down can be bound on their \
+               own, without Ctrl, Alt or Shift — handy when both hands are on the game.",
+            ),
         );
     }
 
@@ -660,9 +695,7 @@ impl SettingsUi {
                 ui.painter()
                     .circle_filled(rect.center(), 14.0, theme.hover_fill());
                 icons::swap(ui.painter(), rect.shrink(7.0), theme.text);
-                if resp.on_hover_text(t("Swap")).clicked()
-                    && s.source_lang != Language::Auto
-                {
+                if resp.on_hover_text(t("Swap")).clicked() && s.source_lang != Language::Auto {
                     std::mem::swap(&mut s.source_lang, &mut s.target_lang);
                 }
                 ui.add_space(6.0);
@@ -676,16 +709,20 @@ impl SettingsUi {
             hint(
                 ui,
                 theme,
-                t("The source language is detected from the recognised text, which is more \
-                   accurate than setting it by hand."),
+                t(
+                    "The source language is detected from the recognised text, which is more \
+                   accurate than setting it by hand.",
+                ),
             );
         } else if s.source_lang == s.target_lang {
             notice(
                 ui,
                 theme,
                 theme.warning,
-                t("The source and target languages are the same — the text will come back \
-                   unchanged."),
+                t(
+                    "The source and target languages are the same — the text will come back \
+                   unchanged.",
+                ),
             );
         }
     }
@@ -873,12 +910,126 @@ impl SettingsUi {
             );
         });
 
+        widgets::section_caption(ui, theme, t("Alibaba Cloud Machine Translation"));
+        hint(
+            ui,
+            theme,
+            t("General edition. Each paragraph is sent with its own id so the translation stays in place."),
+        );
+        ui.add_space(6.0);
+        widgets::list(ui, theme, |ui| {
+            widgets::row(
+                ui,
+                theme,
+                RowSpec::new(t("AccessKey ID"))
+                    .subtitle(t("The AccessKey ID, from the Alibaba Cloud AccessKey list")),
+                |ui| {
+                    if ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.aliyun_id)
+                                .desired_width(field_width(ui))
+                                .hint_text("LTAI…"),
+                        )
+                        .changed()
+                    {
+                        s.engines.aliyun_config.access_key_id = self.aliyun_id.trim().to_string();
+                        out.engines_changed = true;
+                    }
+                },
+            );
+            widgets::row(
+                ui,
+                theme,
+                RowSpec::new(t("AccessKey Secret"))
+                    .subtitle(t("Hidden; from the Alibaba Cloud AccessKey list")),
+                |ui| {
+                    if secret_field(
+                        ui,
+                        "aliyun_secret",
+                        &mut self.aliyun_secret,
+                        self.reveal_keys,
+                    ) {
+                        s.engines.aliyun_config.access_key_secret =
+                            Secret::new(self.aliyun_secret.trim());
+                        out.engines_changed = true;
+                    }
+                },
+            );
+            widgets::row(
+                ui,
+                theme,
+                RowSpec::new(t("Show keys")).subtitle(t("Unmasks the fields above")),
+                |ui| {
+                    widgets::toggle(ui, theme, &mut self.reveal_keys);
+                },
+            );
+            widgets::row(
+                ui,
+                theme,
+                RowSpec::new(t("Service endpoint")).subtitle(t(
+                    "Most regions share this address. Change it only if you were told to use another official endpoint.",
+                )),
+                |ui| {
+                    egui::ComboBox::from_id_salt("aliyun_endpoint")
+                        .selected_text(s.engines.aliyun_config.endpoint.label())
+                        .width(220.0)
+                        .show_ui(ui, |ui| {
+                            for endpoint in AliyunEndpoint::all() {
+                                if ui
+                                    .selectable_value(
+                                        &mut s.engines.aliyun_config.endpoint,
+                                        endpoint,
+                                        endpoint.label(),
+                                    )
+                                    .clicked()
+                                {
+                                    out.engines_changed = true;
+                                }
+                            }
+                        });
+                },
+            );
+            widgets::row(
+                ui,
+                theme,
+                RowSpec::new(t("Test connection"))
+                    .subtitle(t(
+                        "Sends a short phrase. The service bills by the character.",
+                    ))
+                    .last(),
+                |ui| {
+                    ui.add_enabled_ui(
+                        !info.aliyun_test_running && s.engines.aliyun_config.is_configured(),
+                        |ui| {
+                            if widgets::secondary_button(ui, theme, t("Test connection")).clicked()
+                            {
+                                out.test_aliyun = true;
+                            }
+                        },
+                    );
+                },
+            );
+        });
+        if !info.aliyun_test_status.is_empty() {
+            let status = info.aliyun_test_status;
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(status).font(text::small()).color(
+                if status.starts_with('✓') {
+                    theme.success
+                } else {
+                    theme.danger
+                },
+            ));
+        }
+
         widgets::section_caption(ui, theme, t("AI translator"));
         hint(
             ui,
             theme,
-            t("Any model with a token, cloud or local. Pick a preset or enter the address \
-               and model by hand."),
+            t(
+                "Any model with a token, cloud or local. Pick a preset or enter the address \
+               and model by hand.",
+            ),
         );
         ui.add_space(6.0);
 
@@ -887,7 +1038,8 @@ impl SettingsUi {
             for preset in AI_PRESETS {
                 let active = s.engines.ai_config.preset_name == preset.name;
                 if preset_chip(ui, theme, preset.display_name(), active).clicked() {
-                    s.engines.ai_config.apply_preset(preset);
+                    s.engines.ai_config.switch_preset(preset);
+                    self.ai_key = s.engines.ai_config.api_key.expose().to_string();
                     out.engines_changed = true;
                 }
             }
@@ -977,8 +1129,9 @@ impl SettingsUi {
             widgets::row(
                 ui,
                 theme,
-                RowSpec::new(t("Let the model read the screenshot"))
-                    .subtitle(t("No separate text recognition; needs a model that accepts images")),
+                RowSpec::new(t("Let the model read the screenshot")).subtitle(t(
+                    "No separate text recognition; needs a model that accepts images",
+                )),
                 |ui| {
                     if widgets::toggle(ui, theme, &mut s.engines.ai_config.vision).changed() {
                         out.engines_changed = true;
@@ -1008,7 +1161,9 @@ impl SettingsUi {
                 ui,
                 theme,
                 RowSpec::new(t("Timeout, s"))
-                    .subtitle(t("How long to wait for an answer before moving to the next engine"))
+                    .subtitle(t(
+                        "How long to wait for an answer before moving to the next engine",
+                    ))
                     .last(),
                 |ui| {
                     ui.add(
@@ -1025,15 +1180,19 @@ impl SettingsUi {
                 ui,
                 theme,
                 theme.warning,
-                t("The model reads screenshots only while the AI engine is switched on, \
-                   configured and first in the queue."),
+                t(
+                    "The model reads screenshots only while the AI engine is switched on, \
+                   configured and first in the queue.",
+                ),
             );
         } else if s.engines.ai_config.vision {
             hint(
                 ui,
                 theme,
-                t("Used for a region you select. A whole window or screen is still recognised \
-                   first, so each paragraph can be put back in its place."),
+                t(
+                    "Used for a region you select. A whole window or screen is still recognised \
+                   first, so each paragraph can be put back in its place.",
+                ),
             );
         }
 
@@ -1048,7 +1207,9 @@ impl SettingsUi {
             egui::TextEdit::multiline(&mut s.engines.ai_config.extra_instructions)
                 .desired_rows(2)
                 .desired_width(f32::INFINITY)
-                .hint_text(t("For example: this is a fantasy RPG; keep it informal, leave names as they are")),
+                .hint_text(t(
+                    "For example: this is a fantasy RPG; keep it informal, leave names as they are",
+                )),
         );
 
         ui.add_space(10.0);
@@ -1079,8 +1240,10 @@ impl SettingsUi {
                 ui,
                 theme,
                 theme.warning,
-                t("On this platform the token is saved in the settings file as-is — \
-                   key encryption is implemented for Windows only so far."),
+                t(
+                    "On this platform the token is saved in the settings file as-is — \
+                   key encryption is implemented for Windows only so far.",
+                ),
             );
         }
 
@@ -1205,9 +1368,11 @@ impl SettingsUi {
             hint(
                 ui,
                 theme,
-                t("A translation that lets clicks through cannot be clicked away. \
+                t(
+                    "A translation that lets clicks through cannot be clicked away. \
                    It leaves on Esc, on its timer, on the “Hide the translation” shortcut, \
-                   or at the next capture."),
+                   or at the next capture.",
+                ),
             );
         }
 
@@ -1366,7 +1531,11 @@ impl SettingsUi {
         ui.add_space(6.0);
 
         if info.history.is_empty() {
-            hint(ui, theme, t("Nothing has been translated in this session yet."));
+            hint(
+                ui,
+                theme,
+                t("Nothing has been translated in this session yet."),
+            );
             return;
         }
 
@@ -1388,7 +1557,11 @@ impl SettingsUi {
         if let Some(id) = toggled {
             // Clicking the open one closes it, so the list can be collapsed back
             // without hunting for a control.
-            self.open_entry = if self.open_entry == Some(id) { None } else { Some(id) };
+            self.open_entry = if self.open_entry == Some(id) {
+                None
+            } else {
+                Some(id)
+            };
         }
 
         if let Some(latest) = info.history.latest() {
@@ -1466,16 +1639,20 @@ impl SettingsUi {
                 ui,
                 theme,
                 theme.warning,
-                t("The log will contain every recognised and translated line, which means \
-                   whatever is on your screen."),
+                t(
+                    "The log will contain every recognised and translated line, which means \
+                   whatever is on your screen.",
+                ),
             );
         }
 
         hint(
             ui,
             theme,
-            t("Each day goes into its own file and old ones are deleted automatically, \
-               so the log does not grow."),
+            t(
+                "Each day goes into its own file and old ones are deleted automatically, \
+               so the log does not grow.",
+            ),
         );
 
         ui.add_space(10.0);
@@ -1830,13 +2007,17 @@ fn history_row(
     /// Room for the target-language badge and the chevron on the right.
     const TRAILING: f32 = 58.0;
 
-    let (rect, response) = ui.allocate_exact_size(
-        Vec2::new(ui.available_width(), HEIGHT),
-        Sense::click(),
-    );
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), HEIGHT), Sense::click());
     let width = (rect.width() - PAD * 2.0 - TRAILING).max(60.0);
 
-    let original = one_line(ui, &entry.original, text::caption(), theme.text_faint, width);
+    let original = one_line(
+        ui,
+        &entry.original,
+        text::caption(),
+        theme.text_faint,
+        width,
+    );
     let translated = one_line(ui, &entry.translated, text::small(), theme.text, width);
 
     let painter = ui.painter();
@@ -1875,11 +2056,23 @@ fn history_row(
     let cy = rect.center().y;
     let s = egui::Stroke::new(1.4_f32, theme.text_dim);
     if open {
-        painter.line_segment([egui::pos2(cx - 5.0, cy - 2.0), egui::pos2(cx, cy + 3.0)], s);
-        painter.line_segment([egui::pos2(cx, cy + 3.0), egui::pos2(cx + 5.0, cy - 2.0)], s);
+        painter.line_segment(
+            [egui::pos2(cx - 5.0, cy - 2.0), egui::pos2(cx, cy + 3.0)],
+            s,
+        );
+        painter.line_segment(
+            [egui::pos2(cx, cy + 3.0), egui::pos2(cx + 5.0, cy - 2.0)],
+            s,
+        );
     } else {
-        painter.line_segment([egui::pos2(cx - 2.0, cy - 5.0), egui::pos2(cx + 3.0, cy)], s);
-        painter.line_segment([egui::pos2(cx + 3.0, cy), egui::pos2(cx - 2.0, cy + 5.0)], s);
+        painter.line_segment(
+            [egui::pos2(cx - 2.0, cy - 5.0), egui::pos2(cx + 3.0, cy)],
+            s,
+        );
+        painter.line_segment(
+            [egui::pos2(cx + 3.0, cy), egui::pos2(cx - 2.0, cy + 5.0)],
+            s,
+        );
     }
     if !last {
         painter.hline(
@@ -2040,20 +2233,37 @@ fn secret_field(ui: &mut egui::Ui, id: &str, buf: &mut String, reveal: bool) -> 
 fn capture_combination(ctx: &egui::Context) -> Option<Option<Hotkey>> {
     ctx.input(|i| {
         for event in &i.raw.events {
-            let egui::Event::Key {
-                key,
-                pressed: true,
-                modifiers,
-                ..
-            } = event
-            else {
-                continue;
-            };
-            if *key == egui::Key::Escape {
-                return Some(None);
-            }
-            let Some(vk) = egui_key_to_vk(*key) else {
-                continue;
+            let (vk, modifiers) = match event {
+                egui::Event::Key {
+                    key: egui::Key::Escape,
+                    pressed: true,
+                    ..
+                } => return Some(None),
+                egui::Event::Key {
+                    key,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                    ..
+                } => {
+                    let Some(vk) = egui_key_to_vk(*key) else {
+                        continue;
+                    };
+                    (vk, modifiers)
+                }
+                #[cfg(windows)]
+                egui::Event::PointerButton {
+                    button,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } => {
+                    let Some(vk) = side_button_to_vk(*button) else {
+                        continue;
+                    };
+                    (vk, modifiers)
+                }
+                _ => continue,
             };
             let mut mods = MOD_NOREPEAT;
             if modifiers.ctrl {
@@ -2079,6 +2289,32 @@ fn capture_combination(ctx: &egui::Context) -> Option<Option<Hotkey>> {
         }
         None
     })
+    .or_else(captured_mouse_combination)
+}
+
+/// Side-button presses seen by the Windows hook while a shortcut is being
+/// recorded, so a binding can be set even when the pointer is not over this
+/// window (egui would otherwise never see the button).
+fn captured_mouse_combination() -> Option<Option<Hotkey>> {
+    let (vk, mods) = crate::features::hotkey::manager::take_captured_mouse()?;
+    let modifiers = (mods & !MOD_NOREPEAT) | MOD_NOREPEAT;
+    if modifiers == MOD_NOREPEAT && !bindable_alone(vk) {
+        return None;
+    }
+    Some(Some(Hotkey {
+        modifiers,
+        key: vk,
+        enabled: true,
+    }))
+}
+
+#[cfg(any(windows, test))]
+fn side_button_to_vk(button: egui::PointerButton) -> Option<u32> {
+    match button {
+        egui::PointerButton::Extra1 => Some(crate::entities::settings::VK_XBUTTON1),
+        egui::PointerButton::Extra2 => Some(crate::entities::settings::VK_XBUTTON2),
+        _ => None,
+    }
 }
 
 fn egui_key_to_vk(key: egui::Key) -> Option<u32> {
@@ -2132,6 +2368,19 @@ fn egui_key_to_vk(key: egui::Key) -> Option<u32> {
         F10 => 0x79,
         F11 => 0x7A,
         F12 => 0x7B,
+        F13 => 0x7C,
+        F14 => 0x7D,
+        F15 => 0x7E,
+        F16 => 0x7F,
+        F17 => 0x80,
+        F18 => 0x81,
+        F19 => 0x82,
+        F20 => 0x83,
+        F21 => 0x84,
+        F22 => 0x85,
+        F23 => 0x86,
+        F24 => 0x87,
+
         Space => 0x20,
         PageUp => 0x21,
         PageDown => 0x22,
@@ -2246,6 +2495,44 @@ mod tests {
         assert_eq!(egui_key_to_vk(egui::Key::Tab), None);
         // Esc cancels the recording; it is never the answer to it.
         assert_eq!(egui_key_to_vk(egui::Key::Escape), None);
+    }
+
+    #[test]
+    fn extended_function_keys_map_and_may_stand_alone() {
+        for key in [
+            egui::Key::F13,
+            egui::Key::F14,
+            egui::Key::F15,
+            egui::Key::F16,
+            egui::Key::F17,
+            egui::Key::F18,
+            egui::Key::F19,
+            egui::Key::F20,
+            egui::Key::F21,
+            egui::Key::F22,
+            egui::Key::F23,
+            egui::Key::F24,
+        ] {
+            let vk = egui_key_to_vk(key).expect("recordable");
+            assert!(bindable_alone(vk), "{key:?} should not need a modifier");
+            assert_ne!(vk_name(vk), "?", "{key:?} has no printable name");
+        }
+    }
+
+    #[test]
+    fn mouse_side_buttons_map_to_the_xbutton_virtual_keys() {
+        use crate::entities::settings::{VK_XBUTTON1, VK_XBUTTON2};
+        assert_eq!(
+            side_button_to_vk(egui::PointerButton::Extra1),
+            Some(VK_XBUTTON1)
+        );
+        assert_eq!(
+            side_button_to_vk(egui::PointerButton::Extra2),
+            Some(VK_XBUTTON2)
+        );
+        assert_eq!(side_button_to_vk(egui::PointerButton::Primary), None);
+        assert_eq!(side_button_to_vk(egui::PointerButton::Secondary), None);
+        assert_eq!(side_button_to_vk(egui::PointerButton::Middle), None);
     }
 
     #[test]

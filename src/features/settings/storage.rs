@@ -70,7 +70,8 @@ pub fn load_settings() -> Settings {
             }
             // In memory only: the file catches up the next time anything is
             // saved, and until then this runs again on every start.
-            if let Some(retired) = settings.engines.ai_config.replace_retired_model() {
+            settings.engines.ai_config.ensure_profiles();
+            if let Some(retired) = settings.engines.ai_config.replace_retired_models() {
                 info!(
                     from = %retired,
                     to = %settings.engines.ai_config.model,
@@ -104,7 +105,9 @@ pub fn save_settings(settings: &Settings) -> Result<(), AppError> {
         std::fs::create_dir_all(parent)?;
     }
 
-    let content = toml::to_string_pretty(settings)?;
+    let mut settings = settings.clone();
+    settings.engines.ai_config.store_current();
+    let content = toml::to_string_pretty(&settings)?;
 
     // Same directory as the target so the rename stays on one volume.
     let tmp = path.with_extension("toml.tmp");

@@ -6,6 +6,7 @@
 //! to Google instead of failing the capture.
 
 pub mod ai;
+pub mod aliyun;
 pub mod deepl;
 pub mod google;
 pub mod yandex;
@@ -99,8 +100,7 @@ pub async fn translate(
                     "Empty translation, trying next engine"
                 );
                 failures.push(t("{engine}: empty response").replace("{engine}", kind.label()));
-                user_reasons
-                    .push(t("{engine}: empty response").replace("{engine}", kind.label()));
+                user_reasons.push(t("{engine}: empty response").replace("{engine}", kind.label()));
             }
             Err(e) => {
                 warn!(engine = kind.label(), error = %e, "Engine failed");
@@ -129,7 +129,7 @@ pub async fn translate(
 fn patience(kind: EngineKind) -> Option<Duration> {
     match kind {
         EngineKind::Yandex | EngineKind::Google => Some(Duration::from_secs(7)),
-        EngineKind::DeepL => Some(Duration::from_secs(10)),
+        EngineKind::DeepL | EngineKind::Aliyun => Some(Duration::from_secs(10)),
         EngineKind::Ai => None,
     }
 }
@@ -144,6 +144,7 @@ async fn attempt(
         EngineKind::Google => google::translate(req).await,
         EngineKind::DeepL => deepl::translate(req, &engines.deepl_key).await,
         EngineKind::Ai => ai::translate(req, &engines.ai_config).await,
+        EngineKind::Aliyun => aliyun::translate(req, &engines.aliyun_config).await,
     }
 }
 
@@ -492,10 +493,17 @@ mod tests {
     #[test]
     fn a_plan_sends_one_piece_per_line_and_gets_one_line_back() {
         let plan = LinePlan::new("Title\nA sentence. Another one.\nButton", 100);
-        assert_eq!(plan.pieces, vec!["Title", "A sentence. Another one.", "Button"]);
+        assert_eq!(
+            plan.pieces,
+            vec!["Title", "A sentence. Another one.", "Button"]
+        );
 
         let back = plan
-            .assemble(&["Заголовок".into(), "Фраза. Ещё одна.".into(), "Кнопка".into()])
+            .assemble(&[
+                "Заголовок".into(),
+                "Фраза. Ещё одна.".into(),
+                "Кнопка".into(),
+            ])
             .expect("same number of pieces");
         assert_eq!(back, "Заголовок\nФраза. Ещё одна.\nКнопка");
     }
@@ -507,7 +515,11 @@ mod tests {
         let plan = LinePlan::new(&text, 60);
         assert!(plan.pieces.len() > 2, "the long line was not split");
 
-        let echoed: Vec<String> = plan.pieces.iter().map(|p| p.trim().to_uppercase()).collect();
+        let echoed: Vec<String> = plan
+            .pieces
+            .iter()
+            .map(|p| p.trim().to_uppercase())
+            .collect();
         let back = plan.assemble(&echoed).expect("same number of pieces");
         let lines: Vec<&str> = back.split('\n').collect();
         assert_eq!(lines.len(), 2, "two lines went in, two must come out");
@@ -531,7 +543,10 @@ mod tests {
 
     #[test]
     fn batches_respect_both_the_size_and_the_item_limits() {
-        let text = (0..10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let text = (0..10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let plan = LinePlan::new(&text, 100);
 
         // Six characters a line: three lines fit in twenty.

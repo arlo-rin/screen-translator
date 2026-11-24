@@ -4,6 +4,7 @@
 //! place that decides what the product looks like, so a visual change lands here
 //! and nowhere else.
 
+pub mod font_face;
 pub mod icons;
 pub mod platform;
 pub mod spin;

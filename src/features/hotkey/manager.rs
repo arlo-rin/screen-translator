@@ -17,11 +17,38 @@
 //! something to dismiss gives the key the meaning it has everywhere else, and
 //! hands it back the moment the translation is gone.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use tracing::{error, info, warn};
+
+/// True while the settings window is waiting for a new combination, so an
+/// already-registered shortcut cannot fire in the middle of being rebound.
+static RECORDING: AtomicBool = AtomicBool::new(false);
+static CAPTURED: Mutex<Option<(u32, u32)>> = Mutex::new(None);
+
+/// Suspend activation while the settings window records a shortcut.
+pub fn set_recording(on: bool) {
+    if !on {
+        let _ = take_captured_mouse();
+    }
+    if RECORDING.swap(on, Ordering::SeqCst) != on {
+        #[cfg(windows)]
+        win::set_recording(on);
+    }
+}
+
+/// A mouse side-button press observed by the Windows hook during recording.
+/// Cleared by the caller. Other platforms always return `None`.
+pub fn take_captured_mouse() -> Option<(u32, u32)> {
+    CAPTURED.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+fn store_captured_mouse(key: u32, modifiers: u32) {
+    *CAPTURED.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, modifiers));
+}
 
 use crate::entities::settings::{Hotkey, HotkeyAction, Hotkeys};
 
@@ -85,7 +112,12 @@ impl HotkeyManager {
 
     /// Drains everything queued since the last frame.
     pub fn poll(&self) -> Vec<HotkeyAction> {
-        self.events.try_iter().collect()
+        let events: Vec<_> = self.events.try_iter().collect();
+        if RECORDING.load(Ordering::SeqCst) {
+            Vec::new()
+        } else {
+            events
+        }
     }
 
     pub fn update(&self, hotkeys: Hotkeys) {
@@ -297,7 +329,7 @@ mod portable {
         let handle = thread::spawn(move || {
             let receiver = GlobalHotKeyEvent::receiver();
             while let Ok(event) = receiver.recv() {
-                if event.state() != HotKeyState::Pressed {
+                if RECORDING.load(Ordering::SeqCst) || event.state() != HotKeyState::Pressed {
                     continue;
                 }
                 let action = bindings
@@ -351,7 +383,7 @@ mod portable {
                 let letter = (b'A' + (vk - 0x41) as u8) as char;
                 return format!("Key{letter}").parse().ok();
             }
-            0x70..=0x7B => return format!("F{}", vk - 0x70 + 1).parse().ok(),
+            0x70..=0x87 => return format!("F{}", vk - 0x70 + 1).parse().ok(),
             0x20 => "Space",
             0x0D => "Enter",
             0x1B => "Escape",
@@ -397,7 +429,11 @@ mod portable {
             assert_eq!(vk_to_code(0x31), Some(Code::Digit1));
             assert_eq!(vk_to_code(0x70), Some(Code::F1));
             assert_eq!(vk_to_code(0x7B), Some(Code::F12));
+            assert_eq!(vk_to_code(0x7C), Some(Code::F13));
+            assert_eq!(vk_to_code(0x87), Some(Code::F24));
             assert_eq!(vk_to_code(0xBF), Some(Code::Slash));
+            assert_eq!(vk_to_code(0x05), None);
+            assert_eq!(vk_to_code(0x06), None);
         }
 
         #[test]
@@ -416,7 +452,7 @@ mod portable {
         #[test]
         fn every_key_that_may_be_bound_alone_has_a_portable_code() {
             for vk in 0..=0xFF {
-                if bindable_alone(vk) {
+                if bindable_alone(vk) && !Hotkeys::is_mouse_button(vk) {
                     assert!(vk_to_code(vk).is_some(), "key {vk:#x} has no portable code");
                 }
             }
@@ -434,7 +470,99 @@ mod portable {
 mod win {
     use super::*;
 
-    use crate::entities::settings::{MOD_NOREPEAT, VK_ESCAPE};
+    use crate::entities::settings::{
+        MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, VK_ESCAPE,
+    };
+    use std::sync::atomic::AtomicUsize;
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, SendMessageW, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK,
+        MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_XBUTTONDOWN, WM_XBUTTONUP,
+    };
+    static WINDOW: AtomicUsize = AtomicUsize::new(0);
+    const WM_RECORDING: u32 = WM_APP + 3;
+
+    pub fn set_recording(on: bool) {
+        let raw = WINDOW.load(Ordering::SeqCst);
+        if raw != 0 {
+            unsafe {
+                let _ = SendMessageW(
+                    HWND(raw as *mut _),
+                    WM_RECORDING,
+                    WPARAM(usize::from(on)),
+                    LPARAM(0),
+                );
+            }
+        }
+    }
+
+    unsafe fn modifiers() -> u32 {
+        let down = |vk| GetAsyncKeyState(vk) < 0;
+        (if down(0x12) { MOD_ALT } else { 0 })
+            | (if down(0x11) { MOD_CONTROL } else { 0 })
+            | (if down(0x10) { MOD_SHIFT } else { 0 })
+            | (if down(0x5B) || down(0x5C) { MOD_WIN } else { 0 })
+    }
+
+    fn has_mouse_binding(hotkeys: Hotkeys) -> bool {
+        hotkeys
+            .all()
+            .into_iter()
+            .any(|(_, hotkey)| hotkey.is_bound() && Hotkeys::is_mouse_button(hotkey.key))
+    }
+
+    unsafe fn set_mouse_hook(state: &mut ThreadState, on: bool) {
+        if on {
+            if state.mouse_hook.is_some() {
+                return;
+            }
+            let hinstance = GetModuleHandleW(PCWSTR::null()).unwrap_or_default();
+            match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), hinstance, 0) {
+                Ok(hook) => state.mouse_hook = Some(hook),
+                Err(e) => warn!(error = ?e, "Mouse hotkey hook unavailable"),
+            }
+        } else if let Some(hook) = state.mouse_hook.take() {
+            let _ = UnhookWindowsHookEx(hook);
+        }
+    }
+
+    /// Low-level hook used only while a side-button shortcut is bound, or
+    /// while the settings window is recording one. The button is never
+    /// swallowed, so ordinary Back / Forward navigation still reaches the
+    /// window under the cursor.
+    unsafe extern "system" fn mouse_proc(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+        if code >= 0 && matches!(wp.0 as u32, WM_XBUTTONDOWN | WM_XBUTTONUP) {
+            let data = &*(lp.0 as *const MSLLHOOKSTRUCT);
+            let key = match data.mouseData >> 16 {
+                1 => crate::entities::settings::VK_XBUTTON1,
+                2 => crate::entities::settings::VK_XBUTTON2,
+                _ => 0,
+            };
+            if key != 0 {
+                STATE.with(|cell| {
+                    let mut guard = cell.borrow_mut();
+                    if let Some(s) = guard.as_mut() {
+                        let index = (key - crate::entities::settings::VK_XBUTTON1) as usize;
+                        let was_down = s.mouse_down[index];
+                        let down = wp.0 as u32 == WM_XBUTTONDOWN;
+                        s.mouse_down[index] = down;
+                        if down && !was_down {
+                            let mods = modifiers();
+                            if RECORDING.load(Ordering::SeqCst) {
+                                store_captured_mouse(key, mods);
+                                s.ctx.request_repaint();
+                            } else if let Some(action) = s.current.action_for(key, mods) {
+                                let _ = s.tx.send(action);
+                                s.ctx.request_repaint();
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        CallNextHookEx(HHOOK::default(), code, wp, lp)
+    }
+
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -494,6 +622,8 @@ mod win {
         pending: Arc<Mutex<Option<Hotkeys>>>,
         accepted: Accepted,
         current: Hotkeys,
+        mouse_down: [bool; 2],
+        mouse_hook: Option<HHOOK>,
     }
 
     thread_local! {
@@ -574,14 +704,17 @@ mod win {
                     pending,
                     accepted: Arc::clone(&accepted),
                     current: Hotkeys::none(),
+                    mouse_down: [false; 2],
+                    mouse_hook: None,
                 });
             });
 
+            WINDOW.store(hwnd.0 as usize, Ordering::SeqCst);
             apply(hwnd, hotkeys);
 
             let mut msg = MSG::default();
             loop {
-                let r = GetMessageW(&mut msg, hwnd, 0, 0);
+                let r = GetMessageW(&mut msg, None, 0, 0);
                 if r.0 <= 0 {
                     break;
                 }
@@ -591,6 +724,14 @@ mod win {
 
             // The original never got here: nothing ever posted WM_QUIT, so the
             // hotkeys stayed registered until the process died.
+            WINDOW.store(0, Ordering::SeqCst);
+            STATE.with(|c| {
+                if let Some(s) = c.borrow_mut().as_mut() {
+                    if let Some(hook) = s.mouse_hook.take() {
+                        let _ = UnhookWindowsHookEx(hook);
+                    }
+                }
+            });
             unregister_all(hwnd);
             let _ = DestroyWindow(hwnd);
             *hwnd_slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -654,6 +795,27 @@ mod win {
                     continue;
                 }
 
+                if Hotkeys::is_mouse_button(want.key) {
+                    set_mouse_hook(state, true);
+                    let duplicate = committed.action_for(want.key, want.modifiers)
+                        .is_some_and(|other| other != action);
+                    if duplicate || state.mouse_hook.is_none() {
+                        if state.mouse_hook.is_none() {
+                            warn!(
+                                action = ?action,
+                                combo = %want.display(),
+                                "Mouse side-button shortcuts need a low-level hook, which this session could not install"
+                            );
+                        }
+                        results.push((action, refused(have)));
+                    } else {
+                        let _ = UnregisterHotKey(hwnd, id);
+                        *committed.slot_mut(action) = want;
+                        results.push((action, Outcome::Accepted));
+                    }
+                    continue;
+                }
+
                 // Probe first: if this combination belongs to another app, the
                 // probe fails and the working binding is left untouched.
                 // A combination this app already holds for another action is
@@ -682,7 +844,7 @@ mod win {
                     Err(e) => {
                         error!(action = ?action, error = ?e, "RegisterHotKey failed");
                         // Put the old one back rather than leaving nothing.
-                        if have.is_bound() {
+                        if have.is_bound() && !Hotkeys::is_mouse_button(have.key) {
                             let _ = RegisterHotKey(
                                 hwnd,
                                 id,
@@ -696,6 +858,10 @@ mod win {
             }
 
             state.current = committed;
+            set_mouse_hook(
+                state,
+                RECORDING.load(Ordering::SeqCst) || has_mouse_binding(committed),
+            );
             *state.accepted.lock().unwrap_or_else(|e| e.into_inner()) = results;
         });
     }
@@ -707,6 +873,33 @@ mod win {
         lparam: LPARAM,
     ) -> LRESULT {
         match msg {
+            WM_RECORDING => {
+                if wparam.0 != 0 {
+                    // Leave Esc alone if it is held for dismissing a
+                    // translation; only the user-assigned keyboard shortcuts
+                    // must be released so the key can be recorded.
+                    for action in HotkeyAction::all() {
+                        let _ = UnregisterHotKey(hwnd, slot_id(action));
+                    }
+                    STATE.with(|cell| {
+                        if let Some(state) = cell.borrow_mut().as_mut() {
+                            set_mouse_hook(state, true);
+                        }
+                    });
+                } else {
+                    let current = STATE.with(|c| c.borrow().as_ref().map(|s| s.current));
+                    if let Some(current) = current {
+                        STATE.with(|c| {
+                            if let Some(s) = c.borrow_mut().as_mut() {
+                                s.current = Hotkeys::none();
+                            }
+                        });
+                        apply(hwnd, current);
+                    }
+                }
+                LRESULT(0)
+            }
+            WM_HOTKEY if RECORDING.load(Ordering::SeqCst) => LRESULT(0),
             WM_HOTKEY => {
                 let id = wparam.0 as i32;
                 let action = if id == DISMISS_ID {
@@ -731,12 +924,9 @@ mod win {
                     // No modifiers beyond "do not auto-repeat". If another
                     // program holds Esc this fails, and the translation can
                     // still be clicked away.
-                    if let Err(e) = RegisterHotKey(
-                        hwnd,
-                        DISMISS_ID,
-                        HOT_KEY_MODIFIERS(MOD_NOREPEAT),
-                        VK_ESCAPE,
-                    ) {
+                    if let Err(e) =
+                        RegisterHotKey(hwnd, DISMISS_ID, HOT_KEY_MODIFIERS(MOD_NOREPEAT), VK_ESCAPE)
+                    {
                         warn!(error = ?e, "Could not take Esc for dismissing");
                     }
                 } else {
@@ -765,5 +955,45 @@ mod win {
             }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
+    }
+}
+
+#[cfg(test)]
+mod recording_tests {
+    use super::*;
+    use crate::entities::settings::{Hotkey, HotkeyAction, Hotkeys, MOD_ALT, VK_XBUTTON1};
+    use std::sync::Mutex;
+
+    /// The capture/recording flags are process-wide, so tests that touch them
+    /// must not run over one another.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn take_captured_mouse_is_empty_until_a_press_is_stored() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = take_captured_mouse();
+        assert_eq!(take_captured_mouse(), None);
+        store_captured_mouse(VK_XBUTTON1, MOD_ALT);
+        assert_eq!(take_captured_mouse(), Some((VK_XBUTTON1, MOD_ALT)));
+        assert_eq!(take_captured_mouse(), None);
+    }
+
+    #[test]
+    fn recording_suppresses_delivery_and_clears_a_pending_capture() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        store_captured_mouse(VK_XBUTTON1, 0);
+        set_recording(false);
+        set_recording(true);
+        assert!(RECORDING.load(Ordering::SeqCst));
+        // A binding still matches; only delivery to the app is suppressed.
+        let mut hotkeys = Hotkeys::none();
+        hotkeys.region = Hotkey::new(0, VK_XBUTTON1);
+        assert_eq!(
+            hotkeys.action_for(VK_XBUTTON1, 0),
+            Some(HotkeyAction::Region)
+        );
+        set_recording(false);
+        assert!(!RECORDING.load(Ordering::SeqCst));
+        assert_eq!(take_captured_mouse(), None);
     }
 }

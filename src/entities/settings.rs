@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::entities::language::Language;
@@ -15,6 +17,8 @@ pub const VK_Q: u32 = 0x51;
 pub const VK_R: u32 = 0x52;
 pub const VK_W: u32 = 0x57;
 pub const VK_ESCAPE: u32 = 0x1B;
+pub const VK_XBUTTON1: u32 = 0x05;
+pub const VK_XBUTTON2: u32 = 0x06;
 pub const MOD_ALT: u32 = 0x0001;
 pub const MOD_CONTROL: u32 = 0x0002;
 pub const MOD_SHIFT: u32 = 0x0004;
@@ -82,7 +86,9 @@ pub fn vk_name(vk: u32) -> &'static str {
             _ => "9",
         },
         0x41..=0x5A => LETTERS[(vk - 0x41) as usize],
-        0x70..=0x7B => FKEYS[(vk - 0x70) as usize],
+        0x70..=0x87 => FKEYS[(vk - 0x70) as usize],
+        VK_XBUTTON1 => "Mouse4 (Back)",
+        VK_XBUTTON2 => "Mouse5 (Forward)",
         0x20 => "Space",
         0x0D => "Enter",
         0x1B => "Esc",
@@ -110,19 +116,20 @@ const LETTERS: [&str; 26] = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
     "T", "U", "V", "W", "X", "Y", "Z",
 ];
-const FKEYS: [&str; 12] = [
-    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+const FKEYS: [&str; 24] = [
+    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "F13", "F14", "F15",
+    "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24",
 ];
 
 /// Whether a key may be bound with no modifier held.
 ///
 /// A bare letter would swallow that letter everywhere on the system, which is
-/// why a shortcut normally needs a modifier. The function row and the
-/// navigation block type nothing, and they are exactly the keys a player has
-/// free: both hands are on the mouse and WASD, and a chord is one finger too
-/// many.
+/// why a shortcut normally needs a modifier. The function row (including
+/// F13–F24), the mouse side buttons, and the navigation block type nothing,
+/// and they are exactly the keys a player has free: both hands are on the
+/// mouse and WASD, and a chord is one finger too many.
 pub fn bindable_alone(vk: u32) -> bool {
-    matches!(vk, 0x70..=0x7B | 0x21..=0x24 | 0x2D | 0x2E)
+    matches!(vk, VK_XBUTTON1 | VK_XBUTTON2 | 0x70..=0x87 | 0x21..=0x24 | 0x2D | 0x2E)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,6 +205,24 @@ impl Hotkeys {
             watch: Hotkey::unbound(),
             hide: Hotkey::unbound(),
         }
+    }
+
+    /// The action bound to this key and modifier set, if any. `MOD_NOREPEAT`
+    /// is not part of the combination and is ignored on both sides.
+    pub fn action_for(&self, key: u32, modifiers: u32) -> Option<HotkeyAction> {
+        self.all().into_iter().find_map(|(action, hotkey)| {
+            let same = hotkey.is_bound()
+                && hotkey.key == key
+                && (hotkey.modifiers & !MOD_NOREPEAT) == (modifiers & !MOD_NOREPEAT);
+            same.then_some(action)
+        })
+    }
+
+    /// Windows XBUTTON1 / XBUTTON2 (mouse 4 / mouse 5). Keyboard virtual-key
+    /// codes overlap these numbers, but `RegisterHotKey` cannot take a mouse
+    /// button; the Windows listener treats them as pointer buttons instead.
+    pub fn is_mouse_button(vk: u32) -> bool {
+        matches!(vk, VK_XBUTTON1 | VK_XBUTTON2)
     }
 
     /// Two actions bound to the same combination means only one of them will
@@ -584,6 +609,7 @@ pub enum EngineKind {
     Google,
     DeepL,
     Ai,
+    Aliyun,
 }
 
 impl EngineKind {
@@ -593,21 +619,26 @@ impl EngineKind {
             EngineKind::Google => "Google",
             EngineKind::DeepL => "DeepL",
             EngineKind::Ai => "AI",
+            EngineKind::Aliyun => t("Alibaba Cloud MT"),
         }
     }
 
-    pub fn all() -> [EngineKind; 4] {
+    pub fn all() -> [EngineKind; 5] {
         [
             EngineKind::Yandex,
             EngineKind::Google,
             EngineKind::DeepL,
             EngineKind::Ai,
+            EngineKind::Aliyun,
         ]
     }
 
     /// Whether this engine is useless without a credential.
     pub fn needs_key(self) -> bool {
-        matches!(self, EngineKind::DeepL | EngineKind::Ai)
+        matches!(
+            self,
+            EngineKind::DeepL | EngineKind::Ai | EngineKind::Aliyun
+        )
     }
 }
 
@@ -625,9 +656,13 @@ pub struct EngineSettings {
     #[serde(default)]
     pub ai: bool,
     #[serde(default)]
+    pub aliyun: bool,
+    #[serde(default)]
     pub deepl_key: Secret,
     #[serde(default)]
     pub ai_config: AiConfig,
+    #[serde(default)]
+    pub aliyun_config: AliyunConfig,
     /// Last-resort Yandex path that drives a real headless browser. Off by
     /// default: it costs a browser launch and several seconds per translation.
     #[serde(default)]
@@ -641,6 +676,7 @@ impl EngineSettings {
             EngineKind::DeepL,
             EngineKind::Yandex,
             EngineKind::Google,
+            EngineKind::Aliyun,
         ]
     }
 
@@ -650,6 +686,7 @@ impl EngineSettings {
             EngineKind::Google => self.google,
             EngineKind::DeepL => self.deepl,
             EngineKind::Ai => self.ai,
+            EngineKind::Aliyun => self.aliyun,
         }
     }
 
@@ -659,6 +696,7 @@ impl EngineSettings {
             EngineKind::Google => self.google = on,
             EngineKind::DeepL => self.deepl = on,
             EngineKind::Ai => self.ai = on,
+            EngineKind::Aliyun => self.aliyun = on,
         }
     }
 
@@ -683,6 +721,7 @@ impl EngineSettings {
             EngineKind::Yandex | EngineKind::Google => true,
             EngineKind::DeepL => !self.deepl_key.is_empty(),
             EngineKind::Ai => self.ai_config.is_usable(),
+            EngineKind::Aliyun => self.aliyun_config.is_configured(),
         }
     }
 
@@ -711,6 +750,13 @@ impl EngineSettings {
                     t("Key required")
                 }
             }
+            EngineKind::Aliyun => {
+                if self.aliyun_config.is_configured() {
+                    t("Ready")
+                } else {
+                    t("Key required")
+                }
+            }
         }
     }
 }
@@ -723,10 +769,63 @@ impl Default for EngineSettings {
             google: true,
             deepl: false,
             ai: false,
+            aliyun: false,
             deepl_key: Secret::default(),
             ai_config: AiConfig::default(),
+            aliyun_config: AliyunConfig::default(),
             yandex_headless_fallback: false,
         }
+    }
+}
+
+// ── Alibaba Cloud Machine Translation ────────────────────────────────────────
+
+/// Official public endpoints from the Machine Translation service-address list.
+/// Most regions share `mt.aliyuncs.com`; the others are listed only where the
+/// documentation gives a distinct host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum AliyunEndpoint {
+    #[default]
+    Default,
+    Hangzhou,
+    Singapore,
+    Riyadh,
+    Dubai,
+}
+
+/// AccessKey credentials for the traditional Machine Translation product.
+/// Kept separate from the AI-model presets: this is not an OpenAI-compatible
+/// endpoint, and switching a preset must never overwrite these fields.
+#[derive(Clone, Serialize, Deserialize, Default)]
+pub struct AliyunConfig {
+    #[serde(default)]
+    pub access_key_id: String,
+    #[serde(default)]
+    pub access_key_secret: Secret,
+    #[serde(default)]
+    pub endpoint: AliyunEndpoint,
+}
+
+impl AliyunConfig {
+    pub fn is_configured(&self) -> bool {
+        !self.access_key_id.trim().is_empty() && !self.access_key_secret.is_empty()
+    }
+}
+
+impl std::fmt::Debug for AliyunConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AliyunConfig")
+            .field(
+                "access_key_id",
+                &if self.access_key_id.is_empty() {
+                    ""
+                } else {
+                    "***"
+                },
+            )
+            .field("access_key_secret", &self.access_key_secret)
+            .field("endpoint", &self.endpoint)
+            .finish()
     }
 }
 
@@ -866,6 +965,38 @@ pub const RETIRED_MODELS: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// One provider's saved AI settings. The live [`AiConfig`] is what translation
+/// and the connection test use; this is what a preset chip restores.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AiProfile {
+    #[serde(default)]
+    pub protocol: AiProtocol,
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub api_key: Secret,
+    #[serde(default = "AiConfig::default_temperature")]
+    pub temperature: f32,
+    #[serde(default)]
+    pub extra_instructions: String,
+    #[serde(default = "AiConfig::default_timeout")]
+    pub timeout_secs: u64,
+    #[serde(default)]
+    pub vision: bool,
+}
+
+impl AiProfile {
+    fn replace_retired_model(&mut self) -> Option<String> {
+        replace_retired(&self.base_url, &mut self.model)
+    }
+}
+
+/// Slot used when the live config has no recognised preset name. The fields
+/// are still saved, and no chip is highlighted.
+pub const AI_CUSTOM_PROFILE: &str = "Custom";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiConfig {
     #[serde(default)]
@@ -891,6 +1022,10 @@ pub struct AiConfig {
     /// recognising the text first. Needs a model that accepts images.
     #[serde(default)]
     pub vision: bool,
+    /// Per-preset copies of the fields above. Missing in older configs; filled
+    /// from the single live configuration on first load.
+    #[serde(default)]
+    pub profiles: BTreeMap<String, AiProfile>,
 }
 
 impl AiConfig {
@@ -914,6 +1049,76 @@ impl AiConfig {
         self.preset_name = preset.name.to_string();
     }
 
+    /// The map key this live configuration is stored under.
+    pub fn profile_key(&self) -> String {
+        profile_key(&self.preset_name)
+    }
+
+    fn to_profile(&self) -> AiProfile {
+        AiProfile {
+            protocol: self.protocol,
+            base_url: self.base_url.clone(),
+            model: self.model.clone(),
+            api_key: self.api_key.clone(),
+            temperature: self.temperature,
+            extra_instructions: self.extra_instructions.clone(),
+            timeout_secs: self.timeout_secs,
+            vision: self.vision,
+        }
+    }
+
+    fn apply_profile(&mut self, profile: AiProfile, preset_name: String) {
+        self.protocol = profile.protocol;
+        self.base_url = profile.base_url;
+        self.model = profile.model;
+        self.api_key = profile.api_key;
+        self.temperature = profile.temperature;
+        self.extra_instructions = profile.extra_instructions;
+        self.timeout_secs = profile.timeout_secs;
+        self.vision = profile.vision;
+        self.preset_name = preset_name;
+    }
+
+    /// Writes the live fields into the slot for the current preset, so a later
+    /// switch can restore them.
+    pub fn store_current(&mut self) {
+        let key = self.profile_key();
+        self.profiles.insert(key, self.to_profile());
+    }
+
+    /// Files a legacy single configuration under its preset (or `Custom` when
+    /// it has no name) without changing the live fields. Safe to call when
+    /// profiles already exist — it does nothing then, so a custom endpoint
+    /// already sitting in a named slot is not reinterpreted.
+    pub fn ensure_profiles(&mut self) {
+        if self.profiles.is_empty() {
+            self.store_current();
+        }
+    }
+
+    /// Saves the current slot, then restores `preset` or starts it with that
+    /// provider's defaults and an empty key.
+    pub fn switch_preset(&mut self, preset: &AiPreset) {
+        if self.preset_name == preset.name {
+            return;
+        }
+        self.store_current();
+        if let Some(profile) = self.profiles.get(preset.name).cloned() {
+            self.apply_profile(profile, preset.name.to_string());
+        } else {
+            self.apply_fresh_preset(preset);
+        }
+    }
+
+    fn apply_fresh_preset(&mut self, preset: &AiPreset) {
+        self.apply_preset(preset);
+        self.api_key = Secret::default();
+        self.temperature = Self::default_temperature();
+        self.extra_instructions = String::new();
+        self.timeout_secs = Self::default_timeout();
+        self.vision = false;
+    }
+
     /// Moves the config off a model that is being withdrawn, onto the one
     /// that replaces it. Returns the model it moved from, if it moved.
     ///
@@ -921,11 +1126,16 @@ impl AiConfig {
     /// that name. The same name behind someone's own gateway, or any model
     /// typed in by hand, is theirs to keep.
     pub fn replace_retired_model(&mut self) -> Option<String> {
-        let endpoint = self.base_url.trim().trim_end_matches('/');
-        let (_, _, successor) = RETIRED_MODELS
-            .iter()
-            .find(|(url, model, _)| endpoint == *url && self.model.trim() == *model)?;
-        Some(std::mem::replace(&mut self.model, (*successor).to_string()))
+        replace_retired(&self.base_url, &mut self.model)
+    }
+
+    /// Same as [`Self::replace_retired_model`], also applied to stored profiles.
+    pub fn replace_retired_models(&mut self) -> Option<String> {
+        let from_active = self.replace_retired_model();
+        for profile in self.profiles.values_mut() {
+            profile.replace_retired_model();
+        }
+        from_active
     }
 
     /// A local model behind `localhost` legitimately needs no key, so "usable"
@@ -940,6 +1150,23 @@ impl AiConfig {
     pub fn requires_key_here(&self) -> bool {
         !is_loopback(&self.base_url)
     }
+}
+
+fn profile_key(preset_name: &str) -> String {
+    let name = preset_name.trim();
+    if name.is_empty() {
+        AI_CUSTOM_PROFILE.to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+fn replace_retired(base_url: &str, model: &mut String) -> Option<String> {
+    let endpoint = base_url.trim().trim_end_matches('/');
+    let (_, _, successor) = RETIRED_MODELS
+        .iter()
+        .find(|(url, retired, _)| endpoint == *url && model.trim() == *retired)?;
+    Some(std::mem::replace(model, (*successor).to_string()))
 }
 
 fn is_loopback(url: &str) -> bool {
@@ -971,6 +1198,7 @@ impl Default for AiConfig {
             timeout_secs: Self::default_timeout(),
             preset_name: AI_PRESETS[0].name.to_string(),
             vision: false,
+            profiles: BTreeMap::new(),
         }
     }
 }
@@ -1176,6 +1404,55 @@ mod tests {
     }
 
     #[test]
+    fn extended_function_keys_and_mouse_side_buttons_are_named_and_may_stand_alone() {
+        for (vk, name) in [
+            (0x7C, "F13"),
+            (0x7D, "F14"),
+            (0x87, "F24"),
+            (VK_XBUTTON1, "Mouse4 (Back)"),
+            (VK_XBUTTON2, "Mouse5 (Forward)"),
+        ] {
+            assert!(bindable_alone(vk), "{vk:#x} should be bindable alone");
+            assert_eq!(vk_name(vk), name);
+        }
+        assert!(!Hotkeys::is_mouse_button(0x70));
+        assert!(Hotkeys::is_mouse_button(VK_XBUTTON1));
+    }
+
+    #[test]
+    fn mouse_and_extended_function_hotkeys_round_trip_through_toml() {
+        let mut hotkeys = Hotkeys::default();
+        hotkeys.region = Hotkey::new(0, VK_XBUTTON1);
+        hotkeys.hide = Hotkey::new(MOD_CONTROL | MOD_ALT, 0x7C);
+        let text = toml::to_string(&hotkeys).expect("serialise");
+        let back: Hotkeys = toml::from_str(&text).expect("deserialise");
+        assert_eq!(back, hotkeys);
+        // An older config that never mentioned these keys still loads.
+        let legacy: Hotkeys =
+            toml::from_str("region = { modifiers = 1, key = 81 }").expect("legacy");
+        assert_eq!(legacy.region.key, VK_Q);
+        assert!(legacy.region.is_bound());
+    }
+
+    #[test]
+    fn action_for_matches_a_combination_and_ignores_norepeat() {
+        let mut hotkeys = Hotkeys::none();
+        hotkeys.watch = Hotkey::new(MOD_SHIFT, VK_XBUTTON2);
+        assert_eq!(
+            hotkeys.action_for(VK_XBUTTON2, MOD_SHIFT),
+            Some(HotkeyAction::Watch)
+        );
+        assert_eq!(
+            hotkeys.action_for(VK_XBUTTON2, MOD_SHIFT | MOD_NOREPEAT),
+            Some(HotkeyAction::Watch)
+        );
+        assert_eq!(hotkeys.action_for(VK_XBUTTON2, 0), None);
+        assert_eq!(hotkeys.action_for(VK_XBUTTON1, MOD_SHIFT), None);
+        hotkeys.watch.enabled = false;
+        assert_eq!(hotkeys.action_for(VK_XBUTTON2, MOD_SHIFT), None);
+    }
+
+    #[test]
     fn function_keys_may_be_bound_alone_and_letters_may_not() {
         assert!(bindable_alone(0x77)); // F8
         assert!(bindable_alone(0x2D)); // Insert
@@ -1332,7 +1609,10 @@ mod tests {
     #[test]
     fn a_config_saved_with_a_withdrawn_model_moves_to_its_successor() {
         let mut c = saved_with_the_old_preset();
-        assert_eq!(c.replace_retired_model().as_deref(), Some("claude-sonnet-4-5"));
+        assert_eq!(
+            c.replace_retired_model().as_deref(),
+            Some("claude-sonnet-4-5")
+        );
         assert_eq!(c.model, "claude-sonnet-5-5");
         // And only once: there is nothing left to move.
         assert_eq!(c.replace_retired_model(), None);
@@ -1392,6 +1672,188 @@ mod tests {
         }
     }
 
+    fn preset_named(name: &str) -> &'static AiPreset {
+        AI_PRESETS
+            .iter()
+            .find(|preset| preset.name == name)
+            .unwrap_or_else(|| panic!("missing preset {name}"))
+    }
+
+    #[test]
+    fn switching_presets_keeps_each_providers_settings_apart() {
+        let mut c = AiConfig::default();
+        c.switch_preset(preset_named("DeepSeek"));
+        c.api_key = Secret::new("sk-deepseek-test");
+        c.model = "deepseek-chat".into();
+        c.temperature = 0.3;
+        c.extra_instructions = "keep names".into();
+        c.timeout_secs = 30;
+        c.vision = true;
+
+        c.switch_preset(preset_named("OpenAI"));
+        assert!(
+            c.api_key.is_empty(),
+            "a new preset must not inherit another provider's key"
+        );
+        assert_eq!(c.base_url, preset_named("OpenAI").base_url);
+        assert_eq!(c.model, preset_named("OpenAI").model);
+        assert_eq!(c.protocol, AiProtocol::OpenAi);
+        assert_eq!(c.temperature, AiConfig::default_temperature());
+        assert!(c.extra_instructions.is_empty());
+        assert_eq!(c.timeout_secs, AiConfig::default_timeout());
+        assert!(!c.vision);
+        // A custom OpenAI-compatible endpoint stays on this slot.
+        c.api_key = Secret::new("sk-tencent-test");
+        c.base_url = "https://tokenhub.tencentmaas.com/v1".into();
+        c.model = "hy-mt2-lite".into();
+
+        c.switch_preset(preset_named("DeepSeek"));
+        assert_eq!(c.preset_name, "DeepSeek");
+        assert_eq!(c.api_key.expose(), "sk-deepseek-test");
+        assert_eq!(c.base_url, preset_named("DeepSeek").base_url);
+        assert_eq!(c.model, "deepseek-chat");
+        assert_eq!(c.temperature, 0.3);
+        assert_eq!(c.extra_instructions, "keep names");
+        assert_eq!(c.timeout_secs, 30);
+        assert!(c.vision);
+
+        c.switch_preset(preset_named("OpenAI"));
+        assert_eq!(c.api_key.expose(), "sk-tencent-test");
+        assert_eq!(c.base_url, "https://tokenhub.tencentmaas.com/v1");
+        assert_eq!(c.model, "hy-mt2-lite");
+    }
+
+    #[test]
+    fn switching_away_and_back_twice_restores_the_same_profile() {
+        let mut c = AiConfig::default();
+        c.switch_preset(preset_named("DeepSeek"));
+        c.api_key = Secret::new("sk-deepseek-test");
+        c.model = "deepseek-chat".into();
+        c.switch_preset(preset_named("Groq"));
+        c.api_key = Secret::new("sk-groq-test");
+        c.model = "custom-groq".into();
+        c.switch_preset(preset_named("DeepSeek"));
+        c.switch_preset(preset_named("Groq"));
+        c.switch_preset(preset_named("DeepSeek"));
+        assert_eq!(c.api_key.expose(), "sk-deepseek-test");
+        assert_eq!(c.model, "deepseek-chat");
+        assert_eq!(c.base_url, preset_named("DeepSeek").base_url);
+        c.switch_preset(preset_named("Groq"));
+        assert_eq!(c.api_key.expose(), "sk-groq-test");
+        assert_eq!(c.model, "custom-groq");
+    }
+
+    #[test]
+    fn profiles_survive_a_toml_round_trip_and_stay_the_active_request() {
+        let mut c = AiConfig::default();
+        c.switch_preset(preset_named("DeepSeek"));
+        c.api_key = Secret::new("sk-deepseek-test");
+        c.model = "deepseek-chat".into();
+        c.store_current();
+        c.switch_preset(preset_named("Mistral"));
+        c.api_key = Secret::new("sk-mistral-test");
+        c.store_current();
+
+        let text = toml::to_string(&c).expect("serialise");
+        assert!(
+            !text.contains("sk-deepseek-test") && !text.contains("sk-mistral-test"),
+            "secrets must not be written in the clear"
+        );
+        let mut back: AiConfig = toml::from_str(&text).expect("deserialise");
+        assert_eq!(back.preset_name, "Mistral");
+        assert_eq!(back.api_key.expose(), "sk-mistral-test");
+        back.switch_preset(preset_named("DeepSeek"));
+        assert_eq!(back.preset_name, "DeepSeek");
+        assert_eq!(back.api_key.expose(), "sk-deepseek-test");
+        assert_eq!(back.model, "deepseek-chat");
+        // The live struct is what translation and the connection test clone.
+        assert_eq!(back.to_profile(), back.profiles["DeepSeek"]);
+    }
+
+    #[test]
+    fn a_legacy_single_config_is_filed_under_its_preset_without_being_rewritten() {
+        let text = r#"
+protocol = "OpenAi"
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-chat"
+api_key = "sk-legacy-test"
+temperature = 0.4
+extra_instructions = "be terse"
+timeout_secs = 20
+preset_name = "DeepSeek"
+vision = true
+"#;
+        let mut c: AiConfig = toml::from_str(text).expect("legacy parse");
+        assert!(c.profiles.is_empty());
+        c.ensure_profiles();
+        assert_eq!(c.preset_name, "DeepSeek");
+        assert_eq!(c.base_url, "https://api.deepseek.com/v1");
+        assert_eq!(c.model, "deepseek-chat");
+        assert_eq!(c.api_key.expose(), "sk-legacy-test");
+        assert_eq!(c.temperature, 0.4);
+        assert_eq!(c.extra_instructions, "be terse");
+        assert_eq!(c.timeout_secs, 20);
+        assert!(c.vision);
+        let stored = c.profiles.get("DeepSeek").expect("migrated");
+        assert_eq!(stored.api_key.expose(), "sk-legacy-test");
+        assert_eq!(stored.base_url, c.base_url);
+        // A second load with profiles already present must not invent a new identity.
+        c.ensure_profiles();
+        assert_eq!(c.profiles.len(), 1);
+    }
+
+    #[test]
+    fn a_legacy_config_with_no_preset_name_is_kept_as_custom() {
+        let text = r#"
+protocol = "OpenAi"
+base_url = "https://llm.example.internal/v1"
+model = "my-model"
+api_key = "sk-custom-test"
+"#;
+        let mut c: AiConfig = toml::from_str(text).expect("legacy parse");
+        c.ensure_profiles();
+        assert_eq!(c.preset_name, "");
+        assert_eq!(c.base_url, "https://llm.example.internal/v1");
+        assert_eq!(c.api_key.expose(), "sk-custom-test");
+        assert!(c.profiles.contains_key(AI_CUSTOM_PROFILE));
+        assert!(!c.profiles.contains_key("DeepSeek"));
+        // Clicking a named preset must not throw this away, nor leak its key.
+        c.switch_preset(preset_named("DeepSeek"));
+        assert!(c.api_key.is_empty());
+        assert_eq!(c.base_url, preset_named("DeepSeek").base_url);
+        let custom = c
+            .profiles
+            .get(AI_CUSTOM_PROFILE)
+            .cloned()
+            .expect("custom kept");
+        c.apply_profile(custom, String::new());
+        assert_eq!(c.preset_name, "");
+        assert_eq!(c.base_url, "https://llm.example.internal/v1");
+        assert_eq!(c.api_key.expose(), "sk-custom-test");
+        assert_eq!(c.model, "my-model");
+    }
+
+    #[test]
+    fn a_named_preset_whose_endpoint_was_edited_is_not_reset_on_migrate() {
+        let text = r#"
+protocol = "OpenAi"
+base_url = "https://tokenhub.tencentmaas.com/v1"
+model = "hy-mt2-lite"
+api_key = "sk-tencent-legacy"
+preset_name = "DeepSeek"
+"#;
+        let mut c: AiConfig = toml::from_str(text).expect("legacy parse");
+        c.ensure_profiles();
+        assert_eq!(c.preset_name, "DeepSeek");
+        assert_eq!(c.base_url, "https://tokenhub.tencentmaas.com/v1");
+        assert_eq!(c.model, "hy-mt2-lite");
+        assert_eq!(c.api_key.expose(), "sk-tencent-legacy");
+        assert_eq!(
+            c.profiles["DeepSeek"].base_url,
+            "https://tokenhub.tencentmaas.com/v1"
+        );
+    }
+
     #[test]
     fn a_fresh_install_starts_on_the_current_anthropic_model() {
         let c = AiConfig::default();
@@ -1419,5 +1881,68 @@ mod tests {
             ..Default::default()
         };
         assert!(h.conflicts().is_empty());
+    }
+
+    #[test]
+    fn aliyun_is_off_and_unconfigured_on_a_fresh_install() {
+        let e = EngineSettings::default();
+        assert!(!e.aliyun);
+        assert!(!e.is_configured(EngineKind::Aliyun));
+        assert!(!e.active().contains(&EngineKind::Aliyun));
+        assert_eq!(
+            e.order.iter().take(4).copied().collect::<Vec<_>>(),
+            vec![
+                EngineKind::Ai,
+                EngineKind::DeepL,
+                EngineKind::Yandex,
+                EngineKind::Google,
+            ]
+        );
+        assert!(e.order.contains(&EngineKind::Aliyun));
+    }
+
+    #[test]
+    fn aliyun_joins_the_chain_only_when_enabled_and_given_keys() {
+        let mut e = EngineSettings::default();
+        e.aliyun = true;
+        e.aliyun_config.access_key_id = "testid".into();
+        e.aliyun_config.access_key_secret = Secret::new("testsecret");
+        assert!(e.active().contains(&EngineKind::Aliyun));
+        e.ai_config.api_key = Secret::new("sk-unrelated");
+        assert_eq!(e.aliyun_config.access_key_secret.expose(), "testsecret");
+        assert_eq!(e.ai_config.api_key.expose(), "sk-unrelated");
+    }
+
+    #[test]
+    fn aliyun_secrets_round_trip_through_the_settings_file() {
+        let mut s = Settings::default();
+        s.engines.aliyun = true;
+        s.engines.aliyun_config.access_key_id = "testid".into();
+        s.engines.aliyun_config.access_key_secret = Secret::new("aliyun-secret-test");
+        s.engines.aliyun_config.endpoint = AliyunEndpoint::Hangzhou;
+        let raw = toml::to_string(&s).expect("serialize");
+        assert!(
+            !raw.contains("aliyun-secret-test"),
+            "secret must not be stored in the clear"
+        );
+        let back: Settings = toml::from_str(&raw).expect("deserialize");
+        assert_eq!(back.engines.aliyun_config.access_key_id, "testid");
+        assert_eq!(
+            back.engines.aliyun_config.access_key_secret.expose(),
+            "aliyun-secret-test"
+        );
+        assert_eq!(
+            back.engines.aliyun_config.endpoint,
+            AliyunEndpoint::Hangzhou
+        );
+    }
+
+    #[test]
+    fn a_legacy_config_without_aliyun_fields_still_loads() {
+        let engines: EngineSettings = toml::from_str("google = true").expect("legacy engines");
+        assert!(!engines.aliyun);
+        assert!(engines.aliyun_config.access_key_id.is_empty());
+        assert_eq!(engines.aliyun_config.endpoint, AliyunEndpoint::Default);
+        assert!(engines.google);
     }
 }

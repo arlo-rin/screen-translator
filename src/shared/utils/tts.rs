@@ -53,13 +53,11 @@ pub fn speak(text: &str) -> Result<(), AppError> {
             })?;
 
         if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(text.as_bytes())
-                .map_err(|e| {
-                    AppError::Other(
-                        t("Could not send the text: {error}").replace("{error}", &e.to_string()),
-                    )
-                })?;
+            stdin.write_all(text.as_bytes()).map_err(|e| {
+                AppError::Other(
+                    t("Could not send the text: {error}").replace("{error}", &e.to_string()),
+                )
+            })?;
         }
 
         // Detached on purpose: speaking a paragraph takes seconds and must not
@@ -114,13 +112,11 @@ pub fn speak(text: &str) -> Result<(), AppError> {
             })?;
 
         if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(text.as_bytes())
-                .map_err(|e| {
-                    AppError::Other(
-                        t("Could not send the text: {error}").replace("{error}", &e.to_string()),
-                    )
-                })?;
+            stdin.write_all(text.as_bytes()).map_err(|e| {
+                AppError::Other(
+                    t("Could not send the text: {error}").replace("{error}", &e.to_string()),
+                )
+            })?;
         }
 
         std::thread::spawn(move || match child.wait() {

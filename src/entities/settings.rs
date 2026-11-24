@@ -1268,9 +1268,8 @@ pub struct Settings {
     /// default: a translation is read once, and one that has to be closed by
     /// hand is one more thing in the way.
     pub close_result_on_focus_loss: bool,
-    /// Raise a desktop notification when a newer release appears. On by
-    /// default — the app sits in the tray, so there is nowhere else a user
-    /// would notice.
+    /// Kept so existing config files still load. This build does not check
+    /// for updates or raise a notification about them.
     pub notify_about_updates: bool,
     /// The release the user has already been told about, so the same version
     /// does not announce itself at every launch.
@@ -1308,7 +1307,7 @@ impl Default for Settings {
             play_sound: false,
             pin_result_window: true,
             close_result_on_focus_loss: true,
-            notify_about_updates: true,
+            notify_about_updates: false,
             notified_version: String::new(),
             keep_history: true,
             ui_language: None,

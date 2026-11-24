@@ -188,7 +188,11 @@ pub fn tool_button(
     } else if resp.hovered() {
         p.rect_filled(rect, 5.0, Color32::from_white_alpha(30));
     }
-    icon(p, rect.shrink(5.5), if active { accent } else { TOOLBAR_TEXT });
+    icon(
+        p,
+        rect.shrink(5.5),
+        if active { accent } else { TOOLBAR_TEXT },
+    );
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
@@ -205,7 +209,13 @@ pub fn toolbar_frame() -> egui::Frame {
 }
 
 /// A small pill that says the app is working, for views with no room for more.
-pub fn working_pill(painter: &egui::Painter, centre: Pos2, label: &str, phase: f32, accent: Color32) {
+pub fn working_pill(
+    painter: &egui::Painter,
+    centre: Pos2,
+    label: &str,
+    phase: f32,
+    accent: Color32,
+) {
     let galley = painter.layout_no_wrap(label.to_owned(), text::small(), TOOLBAR_TEXT);
     let size = Vec2::new(galley.size().x + 44.0, 30.0);
     let rect = Rect::from_center_size(centre, size);
@@ -396,7 +406,10 @@ mod tests {
         let captured = anchor(560.0, 1010.0, 800.0, 70.0);
         let p = place_subtitle(BAR, WORK, captured, false, 70.0);
         let bar = Rect::from_min_size(p, BAR);
-        assert!(!bar.intersects(captured), "{bar:?} still covers {captured:?}");
+        assert!(
+            !bar.intersects(captured),
+            "{bar:?} still covers {captured:?}"
+        );
         assert!(bar.max.y <= captured.min.y, "expected it above the capture");
     }
 

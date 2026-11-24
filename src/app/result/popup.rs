@@ -14,7 +14,7 @@ use crate::shared::i18n::t;
 use crate::ui::theme::text;
 use crate::ui::{icons, widgets, Theme};
 
-pub const TITLE: &str = "Sakura result popup";
+pub const TITLE: &str = "Screen Translator popup";
 
 const WIDTH: f32 = 380.0;
 /// Everything in the popup that is not the text: header, separator, button row
@@ -101,6 +101,7 @@ impl ResultUi {
                         rounded: Some(theme.metrics.surface_radius),
                         hidden_from_capture: false,
                         translucent: true,
+                        ..Default::default()
                     },
                 );
                 native::reveal(ctx, self.frames);

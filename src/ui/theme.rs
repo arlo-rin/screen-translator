@@ -1,18 +1,13 @@
-//! Sakura design tokens.
+//! Material Design 3–inspired design tokens.
 //!
-//! One brand, two dialects. The sakura pink is constant; everything structural —
-//! the accent, the surfaces, the greys — comes from the platform, because the
-//! design specifies Aqua and Fluent as two complete rounds rather than one look
-//! with different corner radii.
+//! One coordinated light/dark system for every platform. The accent is a
+//! restrained Google blue, chosen so labels on primary actions stay readable.
+//! Surfaces are tonal: the window, the navigation pane and the grouped cards
+//! sit a step apart, and a faint separator hints at structure without drawing
+//! a hard outline on every row.
 //!
-//! Notably the accent is *not* shared: macOS uses the Aqua blue on a white
-//! foreground, while Windows uses Fluent `#0F6CBD` in light mode and the much
-//! lighter `#4CC2FF` in dark — which needs a dark navy foreground, not white, or
-//! the label on a primary button is unreadable.
-//!
-//! Surfaces are frameless. Depth comes from a step in fill — `group` sits a
-//! couple of tones off `window` — and from `separator`, a divider faint enough
-//! to read as a hint of structure rather than a line.
+//! Platform metrics (fonts, caption buttons, hotkey spelling) stay native.
+//! Colour and typography no longer try to imitate Fluent or Aqua.
 
 use egui::{Color32, Context, FontData, FontDefinitions, FontFamily, Rounding, Stroke, Visuals};
 use tracing::debug;
@@ -95,7 +90,7 @@ pub struct Theme {
     /// The grouped container that settings rows sit in: a couple of tones off
     /// `window`, no outline.
     pub card: Color32,
-    /// Translation column — a whisper of sakura so the eye lands on it first.
+    /// Translation column — a soft primary-container tint so the eye lands on it first.
     pub card_accent: Color32,
     /// Glass popups floating over the desktop.
     pub glass: Color32,
@@ -118,11 +113,18 @@ pub struct Theme {
     pub on_accent: Color32,
 
     /// Brand mark and anything that says "this is the translation".
+    /// Kept as a blue in the same family as `accent`, not a second brand colour.
     pub sakura: Color32,
     pub sakura_deep: Color32,
     pub sakura_soft: Color32,
     /// Primary actions and selection.
     pub accent: Color32,
+    /// Tonal fill for selected navigation, chips and secondary buttons.
+    pub primary_container: Color32,
+    pub on_primary_container: Color32,
+    /// Tonal container for destructive hover states (e.g. window close button).
+    pub error_container: Color32,
+    pub on_error_container: Color32,
     pub success: Color32,
     pub warning: Color32,
     pub danger: Color32,
@@ -153,153 +155,87 @@ impl Theme {
     }
 
     pub fn for_platform(platform: Platform, dark: bool) -> Self {
-        match (platform, dark) {
-            (Platform::Windows, false) => Self::windows_light(),
-            (Platform::Windows, true) => Self::windows_dark(),
-            (Platform::MacOs, false) => Self::mac_light(),
-            (Platform::MacOs, true) => Self::mac_dark(),
-        }
+        let mut theme = if dark {
+            Self::material_dark()
+        } else {
+            Self::material_light()
+        };
+        theme.platform = platform;
+        theme.metrics = platform.metrics();
+        theme
     }
 
-    fn windows_light() -> Self {
+    fn material_light() -> Self {
         let platform = Platform::Windows;
         Self {
             dark: false,
             platform,
             metrics: platform.metrics(),
 
-            window: Color32::from_rgb(0xF3, 0xF3, 0xF3),
-            chrome: Color32::from_rgb(0xF3, 0xF3, 0xF3),
+            window: Color32::from_rgb(0xF7, 0xF9, 0xFC),
+            chrome: Color32::from_rgb(0xF0, 0xF4, 0xF9),
             card: Color32::WHITE,
-            card_accent: Color32::from_rgb(0xFD, 0xF4, 0xF7),
-            glass: wash(0xF9, 0xF9, 0xF9, 242),
-            footer: wash(0, 0, 0, 6),
-            scrim: wash(6, 12, 24, 140),
+            card_accent: Color32::from_rgb(0xD3, 0xE3, 0xFD),
+            glass: wash(0xF7, 0xF9, 0xFC, 247),
+            footer: wash(0, 0, 0, 8),
+            scrim: wash(16, 22, 36, 148),
 
-            separator: wash(0, 0, 0, 16),
-            border: wash(0, 0, 0, 14),
+            separator: wash(0, 0, 0, 22),
+            border: wash(0, 0, 0, 28),
 
-            text: Color32::from_rgb(0x1B, 0x1B, 0x1B),
-            text_dim: Color32::from_rgb(0x6E, 0x6E, 0x70),
-            text_faint: Color32::from_rgb(0x8C, 0x8C, 0x90),
+            text: Color32::from_rgb(0x1A, 0x1C, 0x1E),
+            text_dim: Color32::from_rgb(0x44, 0x47, 0x4F),
+            text_faint: Color32::from_rgb(0x74, 0x77, 0x7F),
             on_accent: Color32::WHITE,
 
-            sakura: Color32::from_rgb(0xE8, 0x7C, 0x9E),
-            sakura_deep: Color32::from_rgb(0xC2, 0x53, 0x7C),
-            sakura_soft: Color32::from_rgb(0xF0, 0xA7, 0xBD),
-            accent: Color32::from_rgb(0x0F, 0x6C, 0xBD),
-            success: Color32::from_rgb(0x0F, 0x7B, 0x0F),
-            warning: Color32::from_rgb(0x9D, 0x5D, 0x00),
-            danger: Color32::from_rgb(0xC4, 0x2B, 0x1C),
+            sakura: Color32::from_rgb(0x0B, 0x57, 0xD0),
+            sakura_deep: Color32::from_rgb(0x08, 0x42, 0xA0),
+            sakura_soft: Color32::from_rgb(0x8A, 0xB4, 0xF8),
+            accent: Color32::from_rgb(0x0B, 0x57, 0xD0),
+            primary_container: Color32::from_rgb(0xD3, 0xE3, 0xFD),
+            on_primary_container: Color32::from_rgb(0x04, 0x1E, 0x49),
+            error_container: Color32::from_rgb(0xFF, 0xDA, 0xD6),
+            on_error_container: Color32::from_rgb(0x93, 0x00, 0x0A),
+            success: Color32::from_rgb(0x0F, 0x6B, 0x2B),
+            warning: Color32::from_rgb(0x8C, 0x4A, 0x00),
+            danger: Color32::from_rgb(0xB3, 0x26, 0x1E),
         }
     }
 
-    fn windows_dark() -> Self {
+    fn material_dark() -> Self {
         let platform = Platform::Windows;
         Self {
             dark: true,
             platform,
             metrics: platform.metrics(),
 
-            window: Color32::from_rgb(0x20, 0x20, 0x24),
-            chrome: Color32::from_rgb(0x20, 0x20, 0x24),
-            card: Color32::from_rgb(0x27, 0x27, 0x2C),
-            card_accent: Color32::from_rgb(0x2E, 0x27, 0x2C),
-            glass: wash(0x20, 0x20, 0x24, 234),
-            footer: wash(255, 255, 255, 8),
-            scrim: wash(6, 12, 24, 145),
+            window: Color32::from_rgb(0x11, 0x13, 0x18),
+            chrome: Color32::from_rgb(0x1A, 0x1C, 0x20),
+            card: Color32::from_rgb(0x1E, 0x20, 0x25),
+            card_accent: Color32::from_rgb(0x1B, 0x3F, 0x73),
+            glass: wash(0x1E, 0x20, 0x25, 242),
+            footer: wash(255, 255, 255, 10),
+            scrim: wash(6, 8, 14, 150),
 
-            // The 0.08 white the brief asks for.
-            separator: wash(255, 255, 255, 20),
-            border: wash(255, 255, 255, 16),
+            separator: wash(255, 255, 255, 22),
+            border: wash(255, 255, 255, 28),
 
-            text: Color32::from_rgb(0xF2, 0xF2, 0xF4),
-            text_dim: Color32::from_rgb(0xA6, 0xA6, 0xAE),
-            text_faint: Color32::from_rgb(0x80, 0x80, 0x88),
-            // Fluent's dark accent is a pale blue; white text on it is illegible.
-            on_accent: Color32::from_rgb(0x00, 0x33, 0x54),
+            text: Color32::from_rgb(0xE3, 0xE2, 0xE6),
+            text_dim: Color32::from_rgb(0xC4, 0xC7, 0xCF),
+            text_faint: Color32::from_rgb(0x8E, 0x90, 0x99),
+            on_accent: Color32::from_rgb(0x06, 0x2E, 0x6F),
 
-            sakura: Color32::from_rgb(0xF0, 0xA7, 0xBD),
-            sakura_deep: Color32::from_rgb(0xE8, 0x7C, 0x9E),
-            sakura_soft: Color32::from_rgb(0xF7, 0xC9, 0xD8),
-            accent: Color32::from_rgb(0x4C, 0xC2, 0xFF),
-            success: Color32::from_rgb(0x6C, 0xCB, 0x5F),
-            warning: Color32::from_rgb(0xFF, 0xB4, 0x3C),
-            danger: Color32::from_rgb(0xFF, 0x99, 0xA4),
-        }
-    }
-
-    fn mac_light() -> Self {
-        let platform = Platform::MacOs;
-        Self {
-            dark: false,
-            platform,
-            metrics: platform.metrics(),
-
-            window: Color32::from_rgb(0xF2, 0xF2, 0xF4),
-            chrome: Color32::from_rgb(0xEC, 0xEC, 0xEF),
-            card: Color32::WHITE,
-            card_accent: Color32::from_rgb(0xFD, 0xF4, 0xF7),
-            glass: wash(0xF6, 0xF6, 0xF8, 238),
-            footer: wash(0, 0, 0, 5),
-            scrim: wash(10, 12, 22, 133),
-
-            separator: wash(0, 0, 0, 14),
-            border: wash(0, 0, 0, 12),
-
-            text: Color32::from_rgb(0x1A, 0x1A, 0x1A),
-            text_dim: Color32::from_rgb(0x6E, 0x6E, 0x72),
-            text_faint: Color32::from_rgb(0x8E, 0x8E, 0x93),
-            on_accent: Color32::WHITE,
-
-            sakura: Color32::from_rgb(0xE8, 0x7C, 0x9E),
-            sakura_deep: Color32::from_rgb(0xC2, 0x53, 0x7C),
-            sakura_soft: Color32::from_rgb(0xF0, 0xA7, 0xBD),
-            // The design's Aqua blue is #2F7CF6, which gives white button labels
-            // only 3.9:1 — under the 4.5:1 needed at this text size. Apple's own
-            // system blue is no better and ships anyway, but a translation popup
-            // is read at a glance over arbitrary backgrounds, so the same hue is
-            // taken two steps deeper to clear the threshold at 4.6:1.
-            accent: Color32::from_rgb(0x2A, 0x72, 0xE0),
-            success: Color32::from_rgb(0x24, 0x8A, 0x3D),
-            warning: Color32::from_rgb(0xB0, 0x6E, 0x00),
-            danger: Color32::from_rgb(0xD7, 0x36, 0x2B),
-        }
-    }
-
-    fn mac_dark() -> Self {
-        let platform = Platform::MacOs;
-        Self {
-            dark: true,
-            platform,
-            metrics: platform.metrics(),
-
-            window: Color32::from_rgb(0x1C, 0x1E, 0x24),
-            chrome: Color32::from_rgb(0x21, 0x23, 0x2A),
-            card: Color32::from_rgb(0x24, 0x26, 0x2E),
-            card_accent: Color32::from_rgb(0x30, 0x28, 0x2F),
-            glass: wash(0x20, 0x22, 0x2A, 232),
-            footer: wash(255, 255, 255, 8),
-            scrim: wash(6, 7, 12, 145),
-
-            separator: wash(255, 255, 255, 20),
-            border: wash(255, 255, 255, 16),
-
-            text: Color32::from_rgb(0xF0, 0xF0, 0xF2),
-            text_dim: Color32::from_rgb(0xA6, 0xA8, 0xB0),
-            text_faint: Color32::from_rgb(0x7C, 0x7E, 0x88),
-            on_accent: Color32::WHITE,
-
-            sakura: Color32::from_rgb(0xF0, 0xA7, 0xBD),
-            sakura_deep: Color32::from_rgb(0xE8, 0x7C, 0x9E),
-            sakura_soft: Color32::from_rgb(0xF7, 0xC9, 0xD8),
-            // The design keeps a white label on blue in dark mode too, so the
-            // blue is deepened here rather than flipping the label to navy the
-            // way the Fluent dark round does. Same value as the light theme.
-            accent: Color32::from_rgb(0x2A, 0x72, 0xE0),
-            success: Color32::from_rgb(0x3D, 0xD1, 0x66),
-            warning: Color32::from_rgb(0xFF, 0xB0, 0x2E),
-            danger: Color32::from_rgb(0xFF, 0x6B, 0x62),
+            sakura: Color32::from_rgb(0xA8, 0xC7, 0xFA),
+            sakura_deep: Color32::from_rgb(0xD3, 0xE3, 0xFD),
+            sakura_soft: Color32::from_rgb(0x8A, 0xB4, 0xF8),
+            accent: Color32::from_rgb(0xA8, 0xC7, 0xFA),
+            primary_container: Color32::from_rgb(0x1B, 0x3F, 0x73),
+            on_primary_container: Color32::from_rgb(0xD3, 0xE3, 0xFD),
+            error_container: Color32::from_rgb(0x93, 0x00, 0x0A),
+            on_error_container: Color32::from_rgb(0xFF, 0xDA, 0xD6),
+            success: Color32::from_rgb(0x86, 0xDB, 0xA3),
+            warning: Color32::from_rgb(0xF5, 0xBD, 0x6B),
+            danger: Color32::from_rgb(0xFF, 0xB4, 0xAB),
         }
     }
 
@@ -359,9 +295,9 @@ impl Theme {
     /// change with whatever it happens to be layered on.
     pub fn field_fill(&self) -> Color32 {
         if self.dark {
-            Color32::from_rgb(0x18, 0x18, 0x1C)
+            Color32::from_rgb(0x0C, 0x0E, 0x13)
         } else {
-            Color32::from_rgb(0xEC, 0xEC, 0xEF)
+            Color32::from_rgb(0xE7, 0xED, 0xF5)
         }
     }
 
@@ -405,9 +341,9 @@ impl Theme {
             color: Color32::from_black_alpha(self.metrics.shadow_alpha),
         };
 
-        // Frameless throughout: a control is a soft fill that reacts to the
-        // pointer, never an outline. Dropdowns and text fields inherit this, so
-        // there is no ring of hairlines down the settings page.
+        // Controls are tonal fills with a generous corner, not outlined boxes.
+        // Dropdowns and text fields inherit the same rounding so the page
+        // reads as one system.
         let r = self.control_rounding();
         for w in [
             &mut v.widgets.noninteractive,
@@ -434,8 +370,8 @@ impl Theme {
 
         let mut style = (*ctx.style()).clone();
         style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-        style.spacing.button_padding = egui::vec2(10.0, 5.0);
-        style.spacing.interact_size.y = 24.0;
+        style.spacing.button_padding = egui::vec2(14.0, 7.0);
+        style.spacing.interact_size.y = 32.0;
         style.spacing.window_margin = egui::Margin::same(self.metrics.window_padding);
         style.visuals.clip_rect_margin = 0.0;
         ctx.set_style(style);
@@ -550,7 +486,7 @@ pub mod text {
     use egui::FontId;
 
     pub fn body() -> FontId {
-        FontId::proportional(12.5)
+        FontId::proportional(13.0)
     }
     /// Part of the type scale, kept so the ramp stays complete even when no
     /// screen currently reaches for this step.
@@ -559,16 +495,16 @@ pub mod text {
         FontId::proportional(13.5)
     }
     pub fn small() -> FontId {
-        FontId::proportional(11.5)
+        FontId::proportional(12.0)
     }
     pub fn caption() -> FontId {
-        FontId::proportional(10.5)
+        FontId::proportional(11.0)
     }
     pub fn mono() -> FontId {
-        FontId::monospace(11.5)
+        FontId::monospace(12.0)
     }
     pub fn translation() -> FontId {
-        FontId::proportional(13.5)
+        FontId::proportional(14.0)
     }
 }
 
@@ -609,8 +545,8 @@ mod tests {
 
     #[test]
     fn a_label_on_a_primary_button_is_readable() {
-        // Fluent's dark accent is pale enough that white text on it fails, which
-        // is exactly why `on_accent` is chosen per theme rather than shared.
+        // Dark theme uses a light primary with a navy label; light theme uses
+        // white on Google blue. Both must clear the 4.5:1 threshold.
         for (name, t) in all_themes() {
             let ratio = contrast(t.on_accent, t.accent);
             assert!(ratio >= 4.5, "{name}: accent contrast is only {ratio:.2}:1");
@@ -655,18 +591,38 @@ mod tests {
     }
 
     #[test]
-    fn the_two_platforms_use_different_accents() {
-        assert_ne!(
+    fn the_two_platforms_share_the_same_accent() {
+        assert_eq!(
             Theme::for_platform(Platform::Windows, false).accent,
             Theme::for_platform(Platform::MacOs, false).accent
+        );
+        assert_eq!(
+            Theme::for_platform(Platform::Windows, true).accent,
+            Theme::for_platform(Platform::MacOs, true).accent
         );
     }
 
     #[test]
-    fn the_brand_pink_is_the_same_on_both_platforms() {
+    fn the_translation_accent_is_the_same_on_both_platforms() {
         assert_eq!(
             Theme::for_platform(Platform::Windows, false).sakura,
             Theme::for_platform(Platform::MacOs, false).sakura
         );
+    }
+
+    #[test]
+    fn a_label_on_a_tonal_container_is_readable() {
+        for (name, t) in all_themes() {
+            let ratio = contrast(t.on_primary_container, t.primary_container);
+            assert!(
+                ratio >= 4.5,
+                "{name}: primary container contrast is only {ratio:.2}:1"
+            );
+            let err_ratio = contrast(t.on_error_container, t.error_container);
+            assert!(
+                err_ratio >= 4.5,
+                "{name}: error container contrast is only {err_ratio:.2}:1"
+            );
+        }
     }
 }

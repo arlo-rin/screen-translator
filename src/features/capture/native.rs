@@ -22,6 +22,9 @@ pub struct Behaviour {
     /// Let what is behind the window show through wherever it was drawn
     /// see-through. The toolkit's own "transparent" is not always honoured.
     pub translucent: bool,
+    /// Hint the compositor's window border/chrome polarity to match the app's
+    /// light or dark theme (Windows 11 `DWMWA_USE_IMMERSIVE_DARK_MODE`).
+    pub dark: Option<bool>,
 }
 
 /// Whether this platform can show a window without activating it.
@@ -72,6 +75,7 @@ pub fn apply(title: &str, behaviour: Behaviour) {
                 rounded: behaviour.rounded.is_some(),
                 hidden_from_capture: behaviour.hidden_from_capture,
                 translucent: behaviour.translucent,
+                dark: behaviour.dark,
             },
         );
     }

@@ -7,7 +7,7 @@
 //!
 //! Every function fills `rect` (assumed square-ish) and takes the stroke colour.
 
-use egui::{Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
+use egui::{Color32, ColorImage, Painter, Pos2, Rect, Shape, Stroke, TextureOptions, Vec2};
 use std::f32::consts::TAU;
 
 fn lerp_rect(rect: Rect, fx: f32, fy: f32) -> Pos2 {
@@ -28,31 +28,73 @@ fn stroke_for(rect: Rect, color: Color32) -> Stroke {
     Stroke::new((rect.width() * 0.09).clamp(1.0, 2.2), color)
 }
 
-/// The brand mark: five petals around a pale centre.
+/// The brand mark: two Material 3 tonal tiles with a Latin "A" and a real 文.
 ///
 /// Geometry comes from `shared::mark`, the same source the build script
-/// rasterises into the executable's icon — so the flower beside "Sakura" in the
-/// window and the one in the tray are the same shape, not two drawings of it.
-pub fn sakura(p: &Painter, rect: Rect, color: Color32) {
-    sakura_spinning(p, rect, color, 0.0, 1.0);
+/// rasterises into the executable's icon — so the mark in the About page and
+/// the one in the tray are the same shape, not two drawings of it.
+pub fn mark(p: &Painter, rect: Rect, color: Color32) {
+    mark_spinning(p, rect, color, 0.0, 1.0);
 }
 
-/// The mark, turned by `turns` and scaled by `scale` — the working animation.
-pub fn sakura_spinning(p: &Painter, rect: Rect, color: Color32, turns: f32, scale: f32) {
+/// Historical name for [`mark`]. Kept so existing call sites keep compiling.
+pub fn sakura(p: &Painter, rect: Rect, color: Color32) {
+    mark(p, rect, color);
+}
+
+/// The mark, scaled by `scale`. While the icon is breathing (`scale` below 1),
+/// `turns` rotates a progress arc around the upright monogram.
+///
+/// Drawn from the same rasteriser as the executable and tray icons. Painting
+/// the 文 outline as an egui `PathShape` deformed the character (the glyph is
+/// not a convex polygon), so the About page now shows the raster itself.
+pub fn mark_spinning(p: &Painter, rect: Rect, color: Color32, turns: f32, scale: f32) {
+    let _ = color;
+    paint_mark_raster(p, rect, turns, scale);
+}
+
+fn paint_mark_raster(p: &Painter, rect: Rect, turns: f32, scale: f32) {
     use crate::shared::mark;
 
-    let c = rect.center();
-    let r = rect.width().min(rect.height()) * 0.5 / mark::extent() * scale.clamp(0.2, 1.0);
-
-    for disc in mark::rotated_petals(turns) {
-        p.circle_filled(c + Vec2::new(disc.dx, disc.dy) * r, disc.r * r, color);
+    let side = rect.width().min(rect.height());
+    if side <= 1.0 {
+        return;
     }
-    let core = mark::core();
-    p.circle_filled(
-        c,
-        core.r * r,
-        Color32::from_rgb(mark::CORE_RGB[0], mark::CORE_RGB[1], mark::CORE_RGB[2]),
+    let px = (side * p.ctx().pixels_per_point())
+        .round()
+        .clamp(16.0, 256.0) as u32;
+    let turns_q = (turns * 1000.0).round() as i32;
+    let scale_q = (scale * 100.0).round() as i32;
+    let id = egui::Id::new(("st-mark", px, turns_q, scale_q));
+    let tex = p.ctx().data_mut(|d| d.get_temp::<egui::TextureHandle>(id));
+    let tex = tex.unwrap_or_else(|| {
+        let scale = scale.clamp(0.2, 1.0);
+        let rgba = if (scale - 1.0).abs() < 0.005 && turns_q == 0 {
+            mark::rasterise(px)
+        } else {
+            mark::rasterise_with(px, turns, scale)
+        };
+        let image = ColorImage::from_rgba_unmultiplied([px as usize, px as usize], &rgba);
+        let tex = p.ctx().load_texture(
+            format!("st-mark-{px}-{turns_q}-{scale_q}"),
+            image,
+            TextureOptions::LINEAR,
+        );
+        p.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
+        tex
+    });
+    p.image(
+        tex.id(),
+        rect,
+        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+        Color32::WHITE,
     );
+}
+
+/// Historical name for [`mark_spinning`].
+#[allow(dead_code)]
+pub fn sakura_spinning(p: &Painter, rect: Rect, color: Color32, turns: f32, scale: f32) {
+    mark_spinning(p, rect, color, turns, scale);
 }
 
 /// Region capture: a marquee with corner handles.
@@ -140,6 +182,35 @@ pub fn close(p: &Painter, rect: Rect, color: Color32) {
     line(p, rect, (0.72, 0.28), (0.28, 0.72), s);
 }
 
+/// Window minimise glyph: a single centred horizontal bar.
+pub fn minimize(p: &Painter, rect: Rect, color: Color32) {
+    let s = stroke_for(rect, color);
+    line(p, rect, (0.24, 0.54), (0.76, 0.54), s);
+}
+
+/// Window maximise glyph: a Material-rounded square.
+pub fn maximize(p: &Painter, rect: Rect, color: Color32) {
+    let s = stroke_for(rect, color);
+    let box_rect = rect.shrink(rect.width() * 0.24);
+    p.rect_stroke(box_rect, egui::Rounding::same(rect.width() * 0.14), s);
+}
+
+/// Window restore glyph: two overlapping Material-rounded squares.
+pub fn restore(p: &Painter, rect: Rect, color: Color32) {
+    let s = stroke_for(rect, color);
+    let front = Rect::from_min_max(lerp_rect(rect, 0.20, 0.34), lerp_rect(rect, 0.66, 0.80));
+    p.rect_stroke(front, egui::Rounding::same(rect.width() * 0.11), s);
+    p.add(Shape::line(
+        vec![
+            lerp_rect(rect, 0.34, 0.22),
+            lerp_rect(rect, 0.73, 0.22),
+            lerp_rect(rect, 0.78, 0.27),
+            lerp_rect(rect, 0.78, 0.66),
+        ],
+        s,
+    ));
+}
+
 /// An upward arrow — "move this up the queue".
 pub fn arrow_up(p: &Painter, rect: Rect, color: Color32) {
     let s = stroke_for(rect, color);
@@ -219,6 +290,7 @@ pub fn keyboard(p: &Painter, rect: Rect, color: Color32) {
 /// the width from the centre and are two thirds the size of the middle one,
 /// with a visible gap between all five. Getting those ratios wrong is what
 /// makes a redrawn logo read as "some diamonds" rather than as Binance.
+#[allow(dead_code)]
 pub fn binance(p: &Painter, rect: Rect, color: Color32) {
     let c = rect.center();
     let unit = rect.width().min(rect.height());
@@ -251,6 +323,7 @@ pub fn binance(p: &Painter, rect: Rect, color: Color32) {
 /// The previous drawing had an ellipse across the stem, which belongs to no
 /// version of the logo. The real one is a plain ₮: a wide bar, a narrower one
 /// under it, and a stem down the middle.
+#[allow(dead_code)]
 pub fn tether(p: &Painter, rect: Rect, color: Color32) {
     let c = rect.center();
     let r = rect.width().min(rect.height()) * 0.46;
@@ -266,10 +339,7 @@ pub fn tether(p: &Painter, rect: Rect, color: Color32) {
 
     // Upper bar, full width.
     p.rect_filled(
-        Rect::from_min_size(
-            egui::pos2(c.x - bar_w / 2.0, top),
-            Vec2::new(bar_w, bar_h),
-        ),
+        Rect::from_min_size(egui::pos2(c.x - bar_w / 2.0, top), Vec2::new(bar_w, bar_h)),
         0.0,
         cut,
     );

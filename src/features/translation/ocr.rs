@@ -627,8 +627,14 @@ mod tests {
             {"x":841,"y":260,"w":76,"h":16,"boxes":[{"x":841,"y":260,"w":76,"h":16,"text":"Disabled"}]}
         ]}});
         let r = parse(&v, 1.0, 1000.0);
-        assert!(r.blocks.iter().all(|b| b.align == Align::Right), "{:?}",
-            r.blocks.iter().map(|b| (&b.text, b.align)).collect::<Vec<_>>());
+        assert!(
+            r.blocks.iter().all(|b| b.align == Align::Right),
+            "{:?}",
+            r.blocks
+                .iter()
+                .map(|b| (&b.text, b.align))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -724,8 +730,14 @@ mod tests {
         assert_eq!(without_stray_brackets("SETTINGS)"), "SETTINGS");
         assert_eq!(without_stray_brackets("[ CREDITS"), "CREDITS");
         // Brackets that pair up, or sit inside, are writing.
-        assert_eq!(without_stray_brackets("Save (recommended)"), "Save (recommended)");
-        assert_eq!(without_stray_brackets("(optional) extras"), "(optional) extras");
+        assert_eq!(
+            without_stray_brackets("Save (recommended)"),
+            "Save (recommended)"
+        );
+        assert_eq!(
+            without_stray_brackets("(optional) extras"),
+            "(optional) extras"
+        );
         assert_eq!(without_stray_brackets("Press (E"), "Press (E");
 
         let v = json!({"data":{"blocks":[

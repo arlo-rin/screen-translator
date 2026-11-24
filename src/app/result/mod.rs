@@ -311,7 +311,9 @@ impl ResultUi {
 
         let leave = match self.deadline() {
             Some(deadline) if !self.hovered_recently() => {
-                let left = deadline.saturating_duration_since(Instant::now()).as_secs_f32();
+                let left = deadline
+                    .saturating_duration_since(Instant::now())
+                    .as_secs_f32();
                 (left / FADE).clamp(0.0, 1.0)
             }
             _ => 1.0,
@@ -567,7 +569,10 @@ mod tests {
         r.set_stage(done("привет"));
         let revision = r.revision;
         r.set_recognised("late".into());
-        assert_eq!(r.revision, revision, "a late progress note changed a finished result");
+        assert_eq!(
+            r.revision, revision,
+            "a late progress note changed a finished result"
+        );
     }
 
     #[test]

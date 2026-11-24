@@ -5,7 +5,6 @@
 //!
 //! * [`session`] — one capture, from the shortcut to the translation on screen;
 //! * [`result`] — how that translation is shown;
-//! * [`updates`] — finding and installing a newer release.
 //!
 //! Settings live here as a plain value rather than behind an `Arc<Mutex<_>>`.
 //! Only the UI thread touches them; background work gets an immutable snapshot
@@ -16,6 +15,7 @@
 mod automation;
 pub mod result;
 mod session;
+#[cfg(test)]
 mod updates;
 
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -43,7 +43,6 @@ use crate::ui::theme::Theme;
 
 use result::{ResultAction, ResultUi, Stage};
 use session::{Job, JobEvent, LastCapture, Pending, Watch};
-use updates::{SharedUpdate, UpdateState};
 
 /// Whether the app has been asked not to bring its windows to the front.
 ///
@@ -99,7 +98,6 @@ pub struct App {
     settings_ui: SettingsUi,
     settings_dirty: bool,
 
-    update: SharedUpdate,
     ai_test: Arc<Mutex<Option<String>>>,
     ai_test_running: bool,
     aliyun_test: Arc<Mutex<Option<String>>>,
@@ -146,9 +144,6 @@ impl App {
             .build()
             .expect("Failed to create the Tokio runtime");
 
-        let update: SharedUpdate = Arc::new(Mutex::new(UpdateState::Checking));
-        updates::spawn_check(&rt, Arc::clone(&update), cc.egui_ctx.clone());
-
         let history = History::new(settings.history_limit);
 
         App {
@@ -171,7 +166,6 @@ impl App {
             settings_wants_focus: open_settings.is_some(),
             settings_ui: SettingsUi::new(open_settings.unwrap_or(Section::General)),
             settings_dirty: false,
-            update,
             ai_test: Arc::new(Mutex::new(None)),
             ai_test_running: false,
             aliyun_test: Arc::new(Mutex::new(None)),
@@ -392,7 +386,6 @@ impl App {
     fn show_settings(&mut self, ctx: &Context) {
         let mut close = false;
         let theme = self.theme;
-        let update = self.update_row();
 
         let ai_status = self
             .ai_test
@@ -409,12 +402,15 @@ impl App {
         let rejected = self.hotkeys.rejected();
         let quiet = stays_in_background();
 
+        let title = t("Screen Translator — Settings");
         let builder = ViewportBuilder::default()
-            .with_title(t("Sakura Screen Translator — Settings"))
+            .with_title(title)
             .with_inner_size([820.0, 680.0])
             .with_min_inner_size([700.0, 480.0])
+            .with_decorations(false)
+            .with_resizable(true)
             .with_active(!quiet)
-            .with_icon(Arc::new(load_app_icon()));
+            .with_icon(crate::features::tray::window_icon());
 
         // Read before the closure borrows `self`.
         let wants_focus = std::mem::take(&mut self.settings_wants_focus) && !quiet;
@@ -426,6 +422,15 @@ impl App {
             ViewportId::from_hash_of("sakura_settings"),
             builder,
             |ctx, _| {
+                native::apply(
+                    title,
+                    native::Behaviour {
+                        rounded: Some(12.0),
+                        dark: Some(theme.dark),
+                        ..Default::default()
+                    },
+                );
+
                 // Once, when the window is asked for. An accessory application
                 // does not come forward on its own, but doing this every frame
                 // pins the focus here and the user cannot switch to anything
@@ -442,10 +447,6 @@ impl App {
                     &theme,
                     &mut settings,
                     &SettingsContext {
-                        update_status: &update.status,
-                        update_check_enabled: update.can_check,
-                        update_install_enabled: update.can_install,
-                        update_progress: update.progress,
                         ai_test_status: &ai_status,
                         ai_test_running: self.ai_test_running,
                         aliyun_test_status: &aliyun_status,
@@ -456,7 +457,8 @@ impl App {
                     },
                 );
 
-                if ctx.input(|i| i.viewport().close_requested())
+                if out.close_window
+                    || ctx.input(|i| i.viewport().close_requested())
                     || ctx.input(|i| i.key_pressed(egui::Key::Escape))
                 {
                     close = true;
@@ -465,7 +467,7 @@ impl App {
             },
         );
 
-        self.apply_settings_changes(ctx, settings, out, update.url);
+        self.apply_settings_changes(ctx, settings, out);
 
         if close {
             self.settings_open = false;
@@ -482,13 +484,7 @@ impl App {
         }
     }
 
-    fn apply_settings_changes(
-        &mut self,
-        ctx: &Context,
-        next: Settings,
-        out: SettingsOutput,
-        install_url: Option<String>,
-    ) {
+    fn apply_settings_changes(&mut self, ctx: &Context, next: Settings, out: SettingsOutput) {
         let theme_changed = next.theme != self.settings.theme;
         let language_changed = next.ui_language != self.settings.ui_language;
         let history_limit_changed = next.history_limit != self.settings.history_limit;
@@ -555,14 +551,6 @@ impl App {
         }
         if out.open_log_dir {
             open_folder(&logging::default_log_dir());
-        }
-        if out.check_update {
-            self.check_for_update(ctx);
-        }
-        if out.install_update {
-            if let Some(url) = install_url {
-                self.install_update(ctx, url);
-            }
         }
         if out.test_ai && !self.ai_test_running {
             self.start_ai_test(ctx);
@@ -731,8 +719,6 @@ impl eframe::App for App {
         self.poll_ai_test();
         self.poll_aliyun_test();
         self.sync_tray_activity(ctx);
-        self.announce_update();
-        self.restart_if_updated(ctx);
 
         if self.overlay.is_some() {
             self.show_overlay(ctx);
@@ -780,10 +766,6 @@ fn settings_equal(a: &Settings, b: &Settings) -> bool {
         (Ok(x), Ok(y)) => x == y,
         _ => false,
     }
-}
-
-fn load_app_icon() -> egui::IconData {
-    crate::features::tray::app_icon(256)
 }
 
 fn open_folder(path: &std::path::Path) {

@@ -17,6 +17,7 @@
 //! reversible until the last, and the leftover is cleaned up on the next
 //! launch.
 
+#![allow(dead_code)]
 use std::path::{Path, PathBuf};
 
 use futures::StreamExt;
@@ -43,16 +44,16 @@ const OLD_SUFFIX: &str = ".old";
 /// Returns the path of the installed executable. Restarting is the caller's
 /// job: this runs on a worker thread, and quitting from here skipped saving the
 /// settings and left the tray icon behind.
-pub async fn download_and_apply(
-    url: &str,
-    progress: impl Fn(u64, u64),
-) -> Result<PathBuf, String> {
+pub async fn download_and_apply(url: &str, progress: impl Fn(u64, u64)) -> Result<PathBuf, String> {
     if !url_is_allowed(url) {
-        return Err(t("The update link does not point to GitHub — the install was cancelled").into());
+        return Err(
+            t("The update link does not point to GitHub — the install was cancelled").into(),
+        );
     }
 
-    let current = std::env::current_exe()
-        .map_err(|e| t("Could not find the program path: {error}").replace("{error}", &e.to_string()))?;
+    let current = std::env::current_exe().map_err(|e| {
+        t("Could not find the program path: {error}").replace("{error}", &e.to_string())
+    })?;
     let dir = current
         .parent()
         .ok_or_else(|| t("Could not determine the install folder").to_string())?
@@ -118,10 +119,10 @@ pub async fn download_and_apply(
     // follow the file, and on Unix the running process keeps the inode.
     if let Err(e) = std::fs::rename(&current, &retired) {
         let _ = std::fs::remove_file(&staged);
-        return Err(
-            t("Could not free the program file: {error}. You may need administrator rights.")
-                .replace("{error}", &e.to_string()),
-        );
+        return Err(t(
+            "Could not free the program file: {error}. You may need administrator rights.",
+        )
+        .replace("{error}", &e.to_string()));
     }
 
     if let Err(e) = std::fs::rename(&staged, &current) {

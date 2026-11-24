@@ -1,33 +1,26 @@
-//! Finding, announcing and installing a newer release.
+//! Update-status wording, kept only so existing unit tests still compile.
 //!
-//! Kept apart from the rest of the app because none of it has anything to do
-//! with translating: it is a small state machine a background task advances and
-//! the settings window reads.
+//! The running app no longer checks for, announces, or installs releases.
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
-use egui::Context;
-use tracing::{error, info, warn};
-
-use super::App;
-use crate::features::updater::{check_for_update, download_and_apply, UpdateInfo};
+use crate::features::updater::UpdateInfo;
 use crate::shared::i18n::t;
-use crate::shared::utils::notify;
 
 #[derive(Debug, Clone)]
 pub(super) enum UpdateState {
     Checking,
     UpToDate,
     Available(UpdateInfo),
-    Downloading { received: u64, total: u64 },
+    Downloading {
+        received: u64,
+        total: u64,
+    },
     /// Installed and waiting to be restarted. The restart happens on the UI
     /// thread so the settings are saved and the tray icon removed first.
     Installed(PathBuf),
     Error(String),
 }
-
-pub(super) type SharedUpdate = Arc<Mutex<UpdateState>>;
 
 /// What the About page shows for the current state.
 pub(super) struct UpdateRow {
@@ -93,135 +86,6 @@ pub(super) fn describe(state: &UpdateState) -> UpdateRow {
         // Already a sentence written for the user; wrapping it in "Error:" only
         // makes it look like a crash report.
         UpdateState::Error(message) => row(message.clone(), true),
-    }
-}
-
-pub(super) fn spawn_check(rt: &tokio::runtime::Runtime, state: SharedUpdate, ctx: Context) {
-    rt.spawn(async move {
-        let next = match check_for_update().await {
-            Ok(Some(info)) => {
-                info!(version = %info.version, "Update available");
-                UpdateState::Available(info)
-            }
-            Ok(None) => UpdateState::UpToDate,
-            Err(e) => {
-                warn!(error = %e, "Update check failed");
-                UpdateState::Error(e)
-            }
-        };
-        *state.lock().unwrap_or_else(|p| p.into_inner()) = next;
-        ctx.request_repaint();
-    });
-}
-
-impl App {
-    pub(super) fn update_row(&self) -> UpdateRow {
-        describe(&self.update.lock().unwrap_or_else(|e| e.into_inner()))
-    }
-
-    pub(super) fn check_for_update(&self, ctx: &Context) {
-        *self.update.lock().unwrap_or_else(|e| e.into_inner()) = UpdateState::Checking;
-        spawn_check(&self.rt, Arc::clone(&self.update), ctx.clone());
-    }
-
-    pub(super) fn install_update(&self, ctx: &Context, url: String) {
-        *self.update.lock().unwrap_or_else(|e| e.into_inner()) = UpdateState::Downloading {
-            received: 0,
-            total: 0,
-        };
-        let state = Arc::clone(&self.update);
-        let repaint = ctx.clone();
-        self.rt.spawn(async move {
-            let progress_state = Arc::clone(&state);
-            let progress_ctx = repaint.clone();
-            let outcome = download_and_apply(&url, move |received, total| {
-                *progress_state.lock().unwrap_or_else(|p| p.into_inner()) =
-                    UpdateState::Downloading { received, total };
-                // The window is idle while this runs; without a nudge the bar
-                // would only move when something else happened to wake it.
-                progress_ctx.request_repaint();
-            })
-            .await;
-
-            *state.lock().unwrap_or_else(|p| p.into_inner()) = match outcome {
-                Ok(path) => UpdateState::Installed(path),
-                Err(e) => {
-                    error!(error = %e, "Update failed");
-                    UpdateState::Error(e)
-                }
-            };
-            repaint.request_repaint();
-        });
-    }
-
-    /// Starts the newly installed build and quits this one.
-    ///
-    /// Done here rather than inside the installer, which runs on a worker
-    /// thread and used to call `process::exit(0)` — that skipped saving the
-    /// settings, left the tray icon behind, and from the outside looked exactly
-    /// like the app crashing after a download.
-    pub(super) fn restart_if_updated(&mut self, ctx: &Context) {
-        let path = {
-            let state = self.update.lock().unwrap_or_else(|e| e.into_inner());
-            match &*state {
-                UpdateState::Installed(path) => path.clone(),
-                _ => return,
-            }
-        };
-
-        // The new copy opens on the About page, so the first thing the user sees
-        // is the version they just installed rather than an app that vanished.
-        match std::process::Command::new(&path)
-            .arg("--settings")
-            .arg("about")
-            .spawn()
-        {
-            Ok(_) => {
-                info!(path = %path.display(), "Restarting into the new version");
-                self.shutdown(ctx);
-            }
-            Err(e) => {
-                error!(error = %e, "Could not start the new version");
-                *self.update.lock().unwrap_or_else(|p| p.into_inner()) = UpdateState::Error(
-                    t("The update is installed but could not be started — open the program again")
-                        .to_string(),
-                );
-            }
-        }
-    }
-
-    /// Tells the user a new release exists, once per release.
-    ///
-    /// The app has no window of its own most of the time, so the only place a
-    /// notice would otherwise appear is a settings page nobody has open. The
-    /// version is remembered so the same release does not announce itself at
-    /// every launch.
-    pub(super) fn announce_update(&mut self) {
-        if !self.settings.notify_about_updates {
-            return;
-        }
-
-        let available = {
-            let state = self.update.lock().unwrap_or_else(|e| e.into_inner());
-            match &*state {
-                UpdateState::Available(info) => Some(info.version.clone()),
-                _ => None,
-            }
-        };
-        let Some(version) = available else { return };
-
-        if self.settings.notified_version == version {
-            return;
-        }
-        self.settings.notified_version.clone_from(&version);
-        self.settings_dirty = true;
-
-        info!(%version, "Notifying about a new release");
-        notify::show(
-            "Sakura Screen Translator",
-            &t("Version {version} is available. You can install it in Settings → About.")
-                .replace("{version}", &version),
-        );
     }
 }
 

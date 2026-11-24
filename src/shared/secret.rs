@@ -66,10 +66,7 @@ impl Serialize for Secret {
 impl<'de> Deserialize<'de> for Secret {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(d)?;
-        match SEALED_PREFIXES
-            .iter()
-            .find_map(|p| raw.strip_prefix(p))
-        {
+        match SEALED_PREFIXES.iter().find_map(|p| raw.strip_prefix(p)) {
             // A key sealed by another user account — or on another platform —
             // cannot be opened here. Treat it as absent rather than failing the
             // whole config parse.
@@ -220,7 +217,9 @@ mod keychain {
         let cipher = CIPHER.as_ref()?;
         let mut nonce = [0u8; NONCE_LEN];
         rand::thread_rng().fill_bytes(&mut nonce);
-        let ciphertext = cipher.encrypt(Nonce::from_slice(&nonce), plain.as_bytes()).ok()?;
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&nonce), plain.as_bytes())
+            .ok()?;
 
         let mut blob = Vec::with_capacity(NONCE_LEN + ciphertext.len());
         blob.extend_from_slice(&nonce);
@@ -230,7 +229,9 @@ mod keychain {
 
     pub fn unseal(sealed: &str) -> Option<String> {
         let cipher = CIPHER.as_ref()?;
-        let blob = base64::engine::general_purpose::STANDARD.decode(sealed).ok()?;
+        let blob = base64::engine::general_purpose::STANDARD
+            .decode(sealed)
+            .ok()?;
         if blob.len() <= NONCE_LEN {
             return None;
         }

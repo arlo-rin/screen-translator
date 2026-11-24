@@ -4,7 +4,9 @@
 //! and pinned on top, and it takes the focus — which is what someone who opens
 //! a translation "in a window" is asking for.
 
-use egui::{Align2, Color32, Pos2, Rect, Sense, Vec2, ViewportBuilder, ViewportCommand, ViewportId};
+use egui::{
+    Align2, Color32, Pos2, Rect, Sense, Vec2, ViewportBuilder, ViewportCommand, ViewportId,
+};
 
 use super::{chrome, ResultAction, ResultUi, Stage};
 use crate::features::capture::native;
@@ -13,7 +15,7 @@ use crate::ui::platform::CaptionStyle;
 use crate::ui::theme::text;
 use crate::ui::{icons, widgets, Theme};
 
-pub const TITLE: &str = "Sakura result window";
+pub const TITLE: &str = "Screen Translator result";
 
 const SIZE: Vec2 = Vec2::new(560.0, 300.0);
 
@@ -69,6 +71,7 @@ impl ResultUi {
             .with_resizable(true)
             .with_min_inner_size([360.0, 200.0])
             .with_transparent(native::TOOLKIT_TRANSPARENCY)
+            .with_icon(crate::features::tray::window_icon())
             // Both directions, explicitly. `ViewportBuilder::patch` only emits a
             // window-level command when the new builder *has* a level, so
             // leaving the field unset on unpin says "no opinion" and the window
@@ -205,7 +208,7 @@ impl ResultUi {
                                     ui.painter().text(
                                         bar.center(),
                                         Align2::CENTER_CENTER,
-                                        t("Sakura — translation"),
+                                        t("Screen Translator — translation"),
                                         text::small(),
                                         theme.text_dim,
                                     );
@@ -269,14 +272,17 @@ impl ResultUi {
                                                 Vec2::new(ui.available_width(), body_h),
                                                 |ui| {
                                                     ui.horizontal_top(|ui| {
-                                                        let col = (ui.available_width() - 1.0) / 2.0;
+                                                        let col =
+                                                            (ui.available_width() - 1.0) / 2.0;
                                                         chrome::column(
                                                             ui,
                                                             theme,
                                                             col,
                                                             body_h,
-                                                            &t("{lang} · ORIGINAL")
-                                                                .replace("{lang}", r.source.badge()),
+                                                            &t("{lang} · ORIGINAL").replace(
+                                                                "{lang}",
+                                                                r.source.badge(),
+                                                            ),
                                                             theme.text_dim,
                                                             &r.original,
                                                             false,
@@ -285,15 +291,20 @@ impl ResultUi {
                                                         ui.painter().vline(
                                                             sep.min.x,
                                                             sep.y_range(),
-                                                            egui::Stroke::new(1.0_f32, theme.separator),
+                                                            egui::Stroke::new(
+                                                                1.0_f32,
+                                                                theme.separator,
+                                                            ),
                                                         );
                                                         chrome::column(
                                                             ui,
                                                             theme,
                                                             col,
                                                             body_h,
-                                                            &t("{lang} · TRANSLATION")
-                                                                .replace("{lang}", r.target.badge()),
+                                                            &t("{lang} · TRANSLATION").replace(
+                                                                "{lang}",
+                                                                r.target.badge(),
+                                                            ),
                                                             theme.sakura_deep,
                                                             &r.translated,
                                                             true,

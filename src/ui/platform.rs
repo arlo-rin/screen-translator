@@ -235,34 +235,34 @@ impl Platform {
     pub const fn metrics(self) -> Metrics {
         match self {
             Platform::Windows => Metrics {
-                surface_radius: 8.0,
-                group_radius: 8.0,
-                control_radius: 5.0,
-                menu_radius: 8.0,
+                surface_radius: 16.0,
+                group_radius: 16.0,
+                control_radius: 12.0,
+                menu_radius: 12.0,
                 row_height: 48.0,
                 row_inset: 16.0,
-                window_padding: 22.0,
-                nav_width: 186.0,
-                page_title_size: 19.0,
-                toggle_size: (38.0, 19.0),
+                window_padding: 16.0,
+                nav_width: 200.0,
+                page_title_size: 22.0,
+                toggle_size: (48.0, 26.0),
                 toggle_dim_knob_when_off: true,
                 nav_style: NavStyle::Indicator,
                 caption: CaptionStyle::Buttons,
                 row_subtitles: true,
                 nav_search: true,
-                shadow_alpha: 128,
+                shadow_alpha: 90,
             },
             Platform::MacOs => Metrics {
-                surface_radius: 10.0,
-                group_radius: 10.0,
-                control_radius: 6.0,
-                menu_radius: 8.0,
+                surface_radius: 16.0,
+                group_radius: 16.0,
+                control_radius: 12.0,
+                menu_radius: 12.0,
                 row_height: 40.0,
-                row_inset: 14.0,
-                window_padding: 20.0,
-                nav_width: 172.0,
-                page_title_size: 15.0,
-                toggle_size: (38.0, 22.0),
+                row_inset: 16.0,
+                window_padding: 16.0,
+                nav_width: 200.0,
+                page_title_size: 22.0,
+                toggle_size: (44.0, 24.0),
                 toggle_dim_knob_when_off: false,
                 nav_style: NavStyle::Filled,
                 caption: CaptionStyle::TrafficLights,
@@ -419,7 +419,14 @@ pub struct Metrics {
     pub page_title_size: f32,
     pub toggle_size: (f32, f32),
     /// Fluent greys the knob out when the switch is off; Aqua keeps it white.
+    /// Kept as a platform-identity flag after chrome was unified. The
+    /// Material-inspired toggle no longer reads this, but tests still assert
+    /// the two platforms disagree.
+    #[allow(dead_code)]
     pub toggle_dim_knob_when_off: bool,
+    /// Same: Windows vs macOS nav marker, unused after the sidebar became a
+    /// shared tonal pill.
+    #[allow(dead_code)]
     pub nav_style: NavStyle,
     pub caption: CaptionStyle,
     /// Windows 11 Settings pairs every row with a one-line explanation.

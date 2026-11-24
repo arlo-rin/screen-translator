@@ -27,6 +27,16 @@ use crate::ui::theme::{text, ThemeMode};
 use crate::ui::widgets::RowSpec;
 use crate::ui::{icons, widgets, Theme};
 
+/// Credits and links shown on the About page.
+pub const SOURCE_CODE_URL: &str = "https://github.com/arlo-rin/screen-translator";
+pub const SOURCE_CODE_LABEL: &str = "github.com/arlo-rin/screen-translator";
+/// Original author, kept verbatim.
+pub const ORIGINAL_AUTHOR_NAME: &str = "クシススミタ";
+pub const ORIGINAL_AUTHOR_URL: &str = "https://github.com/Kushisusumita";
+/// Additional author of this custom build.
+pub const ADDITIONAL_AUTHOR_NAME: &str = "arlo rin";
+pub const ADDITIONAL_AUTHOR_URL: &str = "https://github.com/arlo-rin";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
     General,
@@ -81,7 +91,7 @@ impl Section {
             Section::Appearance => t("Theme and how the translation is shown"),
             Section::History => t("Recent translations from this session"),
             Section::Logs => t("What is written to disk, and for how long"),
-            Section::About => t("Version, updates and links"),
+            Section::About => t("Version, authors and links"),
         }
     }
 
@@ -99,7 +109,7 @@ impl Section {
             }
             Section::History => t("history translations recent clear memory"),
             Section::Logs => t("log journal debug privacy"),
-            Section::About => t("version update license author donate"),
+            Section::About => t("version license author source"),
         }
     }
 
@@ -116,17 +126,49 @@ impl Section {
         }
     }
 
-    /// Only used by the macOS nav, which puts the icon on a coloured tile.
-    fn tile(self) -> Color32 {
+    /// Colour of the unselected sidebar icon.
+    ///
+    /// Uses a distinct Material Design 3 tonal hue per section (Tone 80 on dark
+    /// chrome, Tone 40 on light chrome, plus neutral-variant slate for General)
+    /// so no two tinted navigation icons repeat a colour while every icon stays
+    /// balanced in lightness and clears 4.5:1 contrast in both themes.
+    fn tile(self, theme: &Theme) -> Color32 {
         match self {
-            Section::General => Color32::from_rgb(0x8E, 0x8E, 0x93),
-            Section::Keys => Color32::from_rgb(0x5E, 0x5C, 0xE6),
-            Section::Languages => Color32::from_rgb(0x34, 0xC7, 0x59),
-            Section::Engine => Color32::from_rgb(0xAF, 0x52, 0xDE),
-            Section::Appearance => Color32::from_rgb(0x1A, 0x1A, 0x1E),
-            Section::History => Color32::from_rgb(0x30, 0xB0, 0xC7),
-            Section::Logs => Color32::from_rgb(0xFF, 0x9F, 0x0A),
-            Section::About => Color32::from_rgb(0xE8, 0x7C, 0x9E),
+            // Neutral Variant (on_surface_variant)
+            Section::General => theme.text_dim,
+            // Primary Blue
+            Section::Keys => theme.accent,
+            // Green
+            Section::Languages => theme.success,
+            // Violet (M3 baseline purple)
+            Section::Engine => {
+                if theme.dark {
+                    Color32::from_rgb(0xD0, 0xBC, 0xFF)
+                } else {
+                    Color32::from_rgb(0x67, 0x50, 0xA4)
+                }
+            }
+            // Rose (M3 tertiary pink)
+            Section::Appearance => {
+                if theme.dark {
+                    Color32::from_rgb(0xF7, 0xB4, 0xCB)
+                } else {
+                    Color32::from_rgb(0x9C, 0x38, 0x66)
+                }
+            }
+            // Cyan / Teal
+            Section::History => {
+                if theme.dark {
+                    Color32::from_rgb(0x7A, 0xD7, 0xE4)
+                } else {
+                    Color32::from_rgb(0x00, 0x68, 0x74)
+                }
+            }
+            // Amber
+            Section::Logs => theme.warning,
+            // About renders the full-colour two-tile brand mark raster; keep
+            // its fallback token aligned with the brand accent.
+            Section::About => theme.sakura,
         }
     }
 
@@ -161,11 +203,6 @@ impl Section {
 
 /// Everything the window needs from the app but does not own.
 pub struct SettingsContext<'a> {
-    pub update_status: &'a str,
-    pub update_check_enabled: bool,
-    pub update_install_enabled: bool,
-    /// How far the download has got, when one is running.
-    pub update_progress: Option<f32>,
     pub ai_test_status: &'a str,
     pub ai_test_running: bool,
     pub aliyun_test_status: &'a str,
@@ -185,14 +222,14 @@ pub struct SettingsOutput {
     pub engines_changed: bool,
     pub logs_changed: bool,
     pub tray_changed: bool,
-    pub check_update: bool,
-    pub install_update: bool,
     pub test_ai: bool,
     pub test_aliyun: bool,
     pub open_log_dir: bool,
     pub clear_history: bool,
     /// Put a sample subtitle on screen.
     pub show_sample: bool,
+    /// Close the settings window (from the Material Design 3 top bar).
+    pub close_window: bool,
 }
 
 pub struct SettingsUi {
@@ -278,18 +315,50 @@ impl SettingsUi {
 
         let mut out = SettingsOutput::default();
         let platform = theme.platform;
+        let maximized = ctx.input(|i| i.viewport().maximized).unwrap_or(false);
+        let resizing = widgets::handle_window_resize(ctx, maximized);
+
+        egui::TopBottomPanel::top("settings_titlebar")
+            .exact_height(widgets::TITLEBAR_HEIGHT)
+            .show_separator_line(false)
+            .frame(egui::Frame::none().fill(theme.chrome))
+            .show(ctx, |ui| {
+                let action = widgets::settings_titlebar(
+                    ui,
+                    theme,
+                    "Screen Translator",
+                    t("Settings"),
+                    maximized,
+                    resizing,
+                );
+                if action.start_drag {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                if action.minimize {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                }
+                if action.toggle_maximize {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+                }
+                if action.close {
+                    out.close_window = true;
+                }
+            });
 
         egui::SidePanel::left("settings_nav")
             .exact_width(theme.metrics.nav_width)
             .resizable(false)
-            .frame(
-                egui::Frame::none()
-                    .fill(theme.chrome)
-                    .inner_margin(egui::Margin::symmetric(8.0, 10.0)),
-            )
+            .show_separator_line(false)
+            .frame(egui::Frame::none().fill(theme.chrome).inner_margin(
+                egui::Margin {
+                    left: 8.0,
+                    right: 8.0,
+                    top: 4.0,
+                    bottom: 10.0,
+                },
+            ))
             .show(ctx, |ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
-                ui.add_space(2.0);
 
                 if theme.metrics.nav_search {
                     widgets::search_field(ui, theme, &mut self.search);
@@ -306,7 +375,7 @@ impl SettingsUi {
                         ui,
                         theme,
                         section.icon(),
-                        section.tile(),
+                        section.tile(theme),
                         section.label(platform),
                         self.section == section,
                     )
@@ -327,46 +396,71 @@ impl SettingsUi {
             });
 
         egui::CentralPanel::default()
-            .frame(
-                egui::Frame::none()
-                    .fill(theme.window)
-                    .inner_margin(egui::Margin::symmetric(22.0, 18.0)),
-            )
+            .frame(egui::Frame::none().fill(theme.chrome))
             .show(ctx, |ui| {
-                ui.add_space(2.0);
-                ui.label(
-                    egui::RichText::new(self.section.label(platform))
-                        .font(egui::FontId::proportional(theme.metrics.page_title_size))
-                        .strong()
-                        .color(theme.text),
+                // Nest the main surface inside the `theme.chrome` top+left
+                // Material Design 3 navigation shell with a rounded top-left
+                // corner, replacing the hard horizontal caption seam.
+                let pane_rect = ui.max_rect();
+                ui.painter().rect_filled(
+                    pane_rect,
+                    egui::Rounding {
+                        nw: theme.metrics.surface_radius,
+                        ne: 0.0,
+                        sw: 0.0,
+                        se: 0.0,
+                    },
+                    theme.window,
                 );
-                if theme.metrics.row_subtitles {
-                    ui.add_space(2.0);
-                    ui.label(
-                        egui::RichText::new(self.section.caption())
-                            .font(text::small())
-                            .color(theme.text_dim),
-                    );
-                }
-                ui.add_space(12.0);
 
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, false])
+                egui::Frame::none()
+                    .inner_margin(egui::Margin::symmetric(22.0, 18.0))
                     .show(ui, |ui| {
-                        // Breathing room at both ends of the scrolled content, so
-                        // the first and last rows are not flush against the edge.
                         ui.add_space(2.0);
-                        match self.section {
-                            Section::General => self.general(ui, theme, settings, info, &mut out),
-                            Section::Keys => self.keys(ui, theme, settings, info, &mut out),
-                            Section::Languages => self.languages(ui, theme, settings),
-                            Section::Engine => self.engine(ui, theme, settings, info, &mut out),
-                            Section::Appearance => self.appearance(ui, theme, settings, &mut out),
-                            Section::History => self.history(ui, theme, settings, info, &mut out),
-                            Section::Logs => self.logs(ui, theme, settings, info, &mut out),
-                            Section::About => self.about(ui, theme, settings, info, &mut out),
+                        ui.label(
+                            egui::RichText::new(self.section.label(platform))
+                                .font(egui::FontId::proportional(theme.metrics.page_title_size))
+                                .strong()
+                                .color(theme.text),
+                        );
+                        if theme.metrics.row_subtitles {
+                            ui.add_space(2.0);
+                            ui.label(
+                                egui::RichText::new(self.section.caption())
+                                    .font(text::small())
+                                    .color(theme.text_dim),
+                            );
                         }
-                        ui.add_space(2.0);
+                        ui.add_space(12.0);
+
+                        egui::ScrollArea::vertical()
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                // Breathing room at both ends of the scrolled content, so
+                                // the first and last rows are not flush against the edge.
+                                ui.add_space(2.0);
+                                match self.section {
+                                    Section::General => {
+                                        self.general(ui, theme, settings, info, &mut out)
+                                    }
+                                    Section::Keys => self.keys(ui, theme, settings, info, &mut out),
+                                    Section::Languages => self.languages(ui, theme, settings),
+                                    Section::Engine => {
+                                        self.engine(ui, theme, settings, info, &mut out)
+                                    }
+                                    Section::Appearance => {
+                                        self.appearance(ui, theme, settings, &mut out)
+                                    }
+                                    Section::History => {
+                                        self.history(ui, theme, settings, info, &mut out)
+                                    }
+                                    Section::Logs => self.logs(ui, theme, settings, info, &mut out),
+                                    Section::About => {
+                                        self.about(ui, theme, settings, info, &mut out)
+                                    }
+                                }
+                                ui.add_space(2.0);
+                            });
                     });
             });
 
@@ -1683,16 +1777,16 @@ impl SettingsUi {
         &mut self,
         ui: &mut egui::Ui,
         theme: &Theme,
-        s: &mut Settings,
-        info: &SettingsContext<'_>,
-        out: &mut SettingsOutput,
+        _s: &mut Settings,
+        _info: &SettingsContext<'_>,
+        _out: &mut SettingsOutput,
     ) {
         ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(Vec2::splat(42.0), Sense::hover());
             icons::sakura(ui.painter(), rect, theme.sakura);
             ui.vertical(|ui| {
                 ui.label(
-                    egui::RichText::new("Sakura Screen Translator")
+                    egui::RichText::new("Screen Translator")
                         .font(egui::FontId::proportional(17.0))
                         .strong()
                         .color(theme.text),
@@ -1707,48 +1801,6 @@ impl SettingsUi {
             });
         });
 
-        widgets::section_caption(ui, theme, t("Updates"));
-        widgets::list(ui, theme, |ui| {
-            widgets::row(
-                ui,
-                theme,
-                RowSpec::new(t("Notify me about new versions"))
-                    .subtitle(t("A system notification when an update is released")),
-                |ui| {
-                    widgets::toggle(ui, theme, &mut s.notify_about_updates);
-                },
-            );
-            widgets::row(
-                ui,
-                theme,
-                RowSpec::new(info.update_status)
-                    .subtitle(t("Downloaded only from this project's GitHub"))
-                    .last(),
-                |ui| {
-                    ui.add_enabled_ui(info.update_check_enabled, |ui| {
-                        if widgets::ghost_button(ui, theme, t("Check")).clicked() {
-                            out.check_update = true;
-                        }
-                    });
-                    ui.add_enabled_ui(info.update_install_enabled, |ui| {
-                        if widgets::primary_button(ui, theme, t("Install")).clicked() {
-                            out.install_update = true;
-                        }
-                    });
-                },
-            );
-        });
-
-        if let Some(fraction) = info.update_progress {
-            ui.add_space(6.0);
-            ui.add(
-                egui::ProgressBar::new(fraction)
-                    .desired_height(6.0)
-                    .fill(theme.accent)
-                    .rounding(egui::Rounding::same(3.0)),
-            );
-        }
-
         widgets::section_caption(ui, theme, t("Links"));
         ui.horizontal(|ui| {
             ui.label(
@@ -1756,73 +1808,15 @@ impl SettingsUi {
                     .font(text::small())
                     .color(theme.text_dim),
             );
-            ui.hyperlink_to(
-                "github.com/Kushisusumita/screen-translator",
-                "https://github.com/Kushisusumita/screen-translator",
-            );
+            ui.hyperlink_to(SOURCE_CODE_LABEL, SOURCE_CODE_URL);
+        });
+
+        widgets::section_caption(ui, theme, t("Authors"));
+        ui.horizontal(|ui| {
+            ui.hyperlink_to(ORIGINAL_AUTHOR_NAME, ORIGINAL_AUTHOR_URL);
         });
         ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(t("Author"))
-                    .font(text::small())
-                    .color(theme.text_dim),
-            );
-            ui.hyperlink_to("クシススミタ", "https://github.com/Kushisusumita");
-        });
-
-        widgets::section_caption(ui, theme, t("Support the project"));
-        // Two labels rather than one string with a newline: a line continuation
-        // inside a translated sentence is easy to get subtly wrong, and did.
-        for line in [
-            t("The app is free and will stay free."),
-            t("Supporting its development, or just saying thanks, is up to you."),
-        ] {
-            ui.label(
-                egui::RichText::new(line)
-                    .font(text::small())
-                    .color(theme.text_dim),
-            );
-        }
-        ui.add_space(9.0);
-
-        const BINANCE_URL: &str = "https://app.binance.com/uni-qr/5gjTx7at";
-        const USDT_ADDRESS: &str = "TNwbTzUgk2F11PDfqP8J9fpZCAN3K4yXPQ";
-
-        widgets::list(ui, theme, |ui| {
-            widgets::row(
-                ui,
-                theme,
-                RowSpec::new("Binance Pay")
-                    .icon(icons::binance)
-                    // Brand colours: a brand mark in the interface's own grey
-                    // is not recognisable as the brand.
-                    .icon_tint(Color32::from_rgb(0xF0, 0xB9, 0x0B))
-                    .subtitle(t("Pay by QR link, no fee")),
-                |ui| {
-                    if widgets::secondary_button(ui, theme, t("Open")).clicked() {
-                        ui.ctx().open_url(egui::OpenUrl::new_tab(BINANCE_URL));
-                    }
-                },
-            );
-            widgets::row(
-                ui,
-                theme,
-                RowSpec::new("USDT · TRC20")
-                    .icon(icons::tether)
-                    .icon_tint(Color32::from_rgb(0x26, 0xA1, 0x7B))
-                    .subtitle(t("No Binance account needed"))
-                    .last(),
-                |ui| {
-                    if widgets::secondary_button(ui, theme, t("Copy address")).clicked() {
-                        ui.output_mut(|o| o.copied_text = USDT_ADDRESS.to_string());
-                    }
-                    ui.label(
-                        egui::RichText::new(USDT_ADDRESS)
-                            .font(text::mono())
-                            .color(theme.text_dim),
-                    );
-                },
-            );
+            ui.hyperlink_to(ADDITIONAL_AUTHOR_NAME, ADDITIONAL_AUTHOR_URL);
         });
     }
 }
@@ -2475,6 +2469,84 @@ mod tests {
         assert!(Section::Engine.matches("DeepL", Platform::Windows));
     }
 
+    fn luminance(c: Color32) -> f32 {
+        let f = |v: u8| {
+            let v = v as f32 / 255.0;
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
+    }
+
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let (x, y) = (luminance(a), luminance(b));
+        let (hi, lo) = if x > y { (x, y) } else { (y, x) };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    #[test]
+    fn sidebar_icons_are_readable_on_light_and_dark_chrome() {
+        // The Appearance tint was once a near-black #1A1C1E, which vanished
+        // on dark chrome. Every section icon must clear 4.5:1 on the nav
+        // background in both themes.
+        for dark in [false, true] {
+            let theme = Theme::for_platform(Platform::Windows, dark);
+            for section in Section::all() {
+                let ratio = contrast(section.tile(&theme), theme.chrome);
+                assert!(
+                    ratio >= 4.5,
+                    "{section:?} ({}) icon on chrome contrast {ratio:.2} is below 4.5:1",
+                    if dark { "dark" } else { "light" }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_appearance_icon_is_not_near_the_dark_chrome() {
+        let theme = Theme::for_platform(Platform::Windows, true);
+        let tile = Section::Appearance.tile(&theme);
+        assert!(
+            contrast(tile, theme.chrome) >= 4.5,
+            "Appearance icon {tile:?} still disappears on dark chrome"
+        );
+        // And it must differ from the chrome itself, not merely pass numerically
+        // by being a slightly different black.
+        let delta = tile.r().abs_diff(theme.chrome.r()) as u16
+            + tile.g().abs_diff(theme.chrome.g()) as u16
+            + tile.b().abs_diff(theme.chrome.b()) as u16;
+        assert!(
+            delta > 80,
+            "Appearance icon is still too close to the chrome"
+        );
+    }
+
+    #[test]
+    fn tinted_sidebar_icons_use_distinct_colors() {
+        // Every vector sidebar icon (all sections except About, which paints
+        // the full-colour brand mark raster) should have its own M3 colour.
+        let tinted: Vec<Section> = Section::all()
+            .into_iter()
+            .filter(|&s| s != Section::About)
+            .collect();
+        for dark in [false, true] {
+            let theme = Theme::for_platform(Platform::Windows, dark);
+            let mut seen = Vec::new();
+            for &section in &tinted {
+                let color = section.tile(&theme);
+                assert!(
+                    !seen.contains(&color),
+                    "{section:?} ({}) repeats sidebar icon colour {color:?}",
+                    if dark { "dark" } else { "light" }
+                );
+                seen.push(color);
+            }
+        }
+    }
+
     #[test]
     fn recorded_keys_map_back_to_printable_names() {
         for key in [
@@ -2568,5 +2640,58 @@ mod tests {
         s.engines.yandex = false;
         s.engines.google = false;
         assert_eq!(engine_summary(&s), "No engine is ready");
+    }
+
+    #[test]
+    fn the_about_page_points_at_the_personal_repository() {
+        assert_eq!(
+            SOURCE_CODE_URL,
+            "https://github.com/arlo-rin/screen-translator"
+        );
+        assert_eq!(SOURCE_CODE_LABEL, "github.com/arlo-rin/screen-translator");
+    }
+
+    #[test]
+    fn the_about_page_credits_both_authors() {
+        assert_eq!(ORIGINAL_AUTHOR_NAME, "クシススミタ");
+        assert_eq!(ORIGINAL_AUTHOR_URL, "https://github.com/Kushisusumita");
+        assert_eq!(ADDITIONAL_AUTHOR_NAME, "arlo rin");
+        assert_eq!(ADDITIONAL_AUTHOR_URL, "https://github.com/arlo-rin");
+        assert_ne!(ORIGINAL_AUTHOR_NAME, ADDITIONAL_AUTHOR_NAME);
+    }
+
+    #[test]
+    fn the_about_page_has_no_donation_or_update_controls() {
+        let src = include_str!("ui.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production source");
+        for needle in [
+            "binance.com",
+            "BINANCE_URL",
+            "USDT_ADDRESS",
+            "TNwbTzUgk2F11PDfqP8J9fpZCAN3K4yXPQ",
+            "Support the project",
+            "Notify me about new versions",
+            "icons::binance",
+            "icons::tether",
+            "update_status",
+            "check_update",
+            "install_update",
+        ] {
+            assert!(
+                !src.contains(needle),
+                "About/settings UI still mentions {needle}"
+            );
+        }
+        assert!(src.contains(SOURCE_CODE_URL));
+        assert!(src.contains(ORIGINAL_AUTHOR_NAME));
+        assert!(src.contains(ADDITIONAL_AUTHOR_NAME));
+        assert!(src.contains("Version, authors and links"));
+        assert!(!src.contains("Version, updates and links"));
+        assert!(
+            !SOURCE_CODE_URL.contains("Kushisusumita"),
+            "source link must be the personal repo, not upstream"
+        );
     }
 }

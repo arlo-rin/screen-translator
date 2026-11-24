@@ -497,7 +497,11 @@ fn source_language(text: &str, detected: Option<Language>, configured: Language)
 /// put back here: text that was all capitals stays all capitals, and text
 /// that began with one begins with one.
 fn match_case(original: &str, translated: &str) -> String {
-    let cased = || original.chars().filter(|c| c.is_uppercase() || c.is_lowercase());
+    let cased = || {
+        original
+            .chars()
+            .filter(|c| c.is_uppercase() || c.is_lowercase())
+    };
     // Two letters in capitals are as likely an abbreviation as a style.
     if cased().count() >= 3 && cased().all(char::is_uppercase) {
         return translated.to_uppercase();
@@ -659,17 +663,30 @@ mod tests {
     fn kana_makes_it_japanese_whatever_the_recogniser_guessed() {
         // What Yandex said about this very line: Chinese.
         let line = "峠は春まで閉ざされている。";
-        assert_eq!(source_language(line, Some(Language::Zh), Language::Auto), Language::Ja);
+        assert_eq!(
+            source_language(line, Some(Language::Zh), Language::Auto),
+            Language::Ja
+        );
         // And even over a source set by hand to something else entirely.
-        assert_eq!(source_language(line, Some(Language::Zh), Language::En), Language::Ja);
+        assert_eq!(
+            source_language(line, Some(Language::Zh), Language::En),
+            Language::Ja
+        );
         // Katakana counts as much as hiragana.
-        assert_eq!(source_language("ゲームオーバー", None, Language::Auto), Language::Ja);
+        assert_eq!(
+            source_language("ゲームオーバー", None, Language::Auto),
+            Language::Ja
+        );
     }
 
     #[test]
     fn hangul_makes_it_korean() {
         assert_eq!(
-            source_language("계속하려면 아무 키나 누르세요", Some(Language::Zh), Language::Auto),
+            source_language(
+                "계속하려면 아무 키나 누르세요",
+                Some(Language::Zh),
+                Language::Auto
+            ),
             Language::Ko
         );
     }
@@ -677,16 +694,28 @@ mod tests {
     #[test]
     fn chinese_with_one_borrowed_kana_is_still_chinese() {
         let sign = "欢迎光临优之良品，这里有最好的零食";
-        assert_eq!(source_language(sign, Some(Language::Zh), Language::Auto), Language::Zh);
+        assert_eq!(
+            source_language(sign, Some(Language::Zh), Language::Auto),
+            Language::Zh
+        );
         let with_no = "欢迎光临优の良品，这里有最好的零食";
-        assert_eq!(source_language(with_no, Some(Language::Zh), Language::Auto), Language::Zh);
+        assert_eq!(
+            source_language(with_no, Some(Language::Zh), Language::Auto),
+            Language::Zh
+        );
     }
 
     #[test]
     fn a_menu_in_kanji_alone_is_whatever_the_player_says_it_is() {
         // Nothing in the letters to go by, and the recogniser says Chinese.
-        assert_eq!(source_language("装備", Some(Language::Zh), Language::Auto), Language::Zh);
-        assert_eq!(source_language("装備", Some(Language::Zh), Language::Ja), Language::Ja);
+        assert_eq!(
+            source_language("装備", Some(Language::Zh), Language::Auto),
+            Language::Zh
+        );
+        assert_eq!(
+            source_language("装備", Some(Language::Zh), Language::Ja),
+            Language::Ja
+        );
     }
 
     #[test]
@@ -705,7 +734,10 @@ mod tests {
 
     #[test]
     fn with_no_guess_at_all_the_setting_stands() {
-        assert_eq!(source_language("Hello", None, Language::Auto), Language::Auto);
+        assert_eq!(
+            source_language("Hello", None, Language::Auto),
+            Language::Auto
+        );
         assert_eq!(source_language("Hello", None, Language::En), Language::En);
     }
 
@@ -728,10 +760,18 @@ mod tests {
     #[test]
     fn text_that_began_with_a_capital_begins_with_one() {
         assert_eq!(match_case("Settings", "настройки"), "Настройки");
-        assert_eq!(match_case("\"Stay here,\" she said.", "«оставайся здесь», — сказала она."),
-            "«Оставайся здесь», — сказала она.");
+        assert_eq!(
+            match_case(
+                "\"Stay here,\" she said.",
+                "«оставайся здесь», — сказала она."
+            ),
+            "«Оставайся здесь», — сказала она."
+        );
         // And only the first letter is touched.
-        assert_eq!(match_case("Open the Gate", "открой ворота"), "Открой ворота");
+        assert_eq!(
+            match_case("Open the Gate", "открой ворота"),
+            "Открой ворота"
+        );
     }
 
     #[test]
@@ -743,19 +783,30 @@ mod tests {
 
     #[test]
     fn each_paragraph_takes_its_own_capitals_and_the_whole_text_follows() {
-        let blocks = [block(0.0, "CONTINUE"), block(40.0, "Settings"), block(80.0, "exit")];
+        let blocks = [
+            block(0.0, "CONTINUE"),
+            block(40.0, "Settings"),
+            block(80.0, "exit"),
+        ];
         let segments = align(&blocks, "продолжить\nнастройки\nвыход");
         let lines: Vec<&str> = segments.iter().map(|s| s.translated.as_str()).collect();
         assert_eq!(lines, ["ПРОДОЛЖИТЬ", "Настройки", "выход"]);
         assert_eq!(
-            whole(&segments, "CONTINUE\nSettings\nexit", "продолжить\nнастройки\nвыход".into()),
+            whole(
+                &segments,
+                "CONTINUE\nSettings\nexit",
+                "продолжить\nнастройки\nвыход".into()
+            ),
             "ПРОДОЛЖИТЬ\nНастройки\nвыход"
         );
     }
 
     #[test]
     fn a_translation_with_no_places_is_still_given_its_capitals() {
-        assert_eq!(whole(&[], "GAME OVER", "игра окончена".into()), "ИГРА ОКОНЧЕНА");
+        assert_eq!(
+            whole(&[], "GAME OVER", "игра окончена".into()),
+            "ИГРА ОКОНЧЕНА"
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use tracing::{info, warn};
 
 use crate::shared::i18n::t;

@@ -103,10 +103,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str, contents: &[u8]) -> String {
-        let path = std::env::temp_dir().join(format!(
-            "sakura-file-bytes-{}-{name}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sakura-file-bytes-{}-{name}", std::process::id()));
         std::fs::write(&path, contents).expect("temp dir is writable");
         path.to_string_lossy().into_owned()
     }

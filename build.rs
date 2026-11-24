@@ -2,7 +2,7 @@
 //! embeds it in the executable.
 //!
 //! Doing it here rather than committing an `.ico` means the taskbar icon, the
-//! tray icon and the mark beside "Sakura" in the settings window cannot drift
+//! tray icon and the mark beside the app name in the settings window cannot drift
 //! apart — they are all `shared::mark`.
 
 // The icon is only ever rasterised on a Windows host; elsewhere the geometry
@@ -33,15 +33,30 @@ fn main() {
 #[cfg(windows)]
 fn embed_windows_icon() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is always set"));
-    let ico_path = out_dir.join("sakura.ico");
+    let ico_path = out_dir.join("app.ico");
 
     match write_ico(&ico_path) {
         Ok(()) => {
             let mut res = winres::WindowsResource::new();
             res.set_icon(&ico_path.to_string_lossy());
+            res.set("ProductName", "Screen Translator");
+            res.set("FileDescription", "Screen Translator");
             if let Err(e) = res.compile() {
                 // Not fatal: the app runs fine, it just has no icon in Explorer.
                 println!("cargo:warning=could not embed the icon resource: {e}");
+            } else {
+                // GNU ld drops the .rsrc section of a static library because
+                // it has no referenced symbols, which is why earlier GNU
+                // builds had no Explorer icon and empty version fields.
+                // Linking the object file itself is what actually embeds it.
+                let obj = out_dir.join("resource.o");
+                if obj.exists() {
+                    println!("cargo:rustc-link-arg={}", obj.display());
+                } else {
+                    println!(
+                        "cargo:warning=winres did not write resource.o; the Explorer icon may be missing"
+                    );
+                }
             }
         }
         Err(e) => println!("cargo:warning=could not generate the icon: {e}"),

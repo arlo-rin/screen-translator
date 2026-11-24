@@ -2,11 +2,11 @@ use crate::shared::error::AppError;
 use crate::shared::i18n::t;
 
 #[cfg(windows)]
-const AUTOSTART_VALUE: &str = "SakuraScreenTranslator";
-/// Value name written by versions before the rename, cleaned up so a user who
+const AUTOSTART_VALUE: &str = "ScreenTranslator";
+/// Value name written by Sakura-branded builds, cleaned up so a user who
 /// upgrades does not end up with the app starting twice.
 #[cfg(windows)]
-const LEGACY_VALUE: &str = "ScreenTranslator";
+const LEGACY_VALUE: &str = "SakuraScreenTranslator";
 
 /// Quotes the executable path for the `Run` key.
 ///
@@ -68,13 +68,12 @@ pub fn set_autostart(enabled: bool, exe_path: &str) -> Result<(), AppError> {
     if !enabled {
         // Absent is the desired state, so "not found" is success.
         if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| {
-                    AppError::Other(
-                        t("Could not remove the autostart entry: {error}")
-                            .replace("{error}", &e.to_string()),
-                    )
-                })?;
+            std::fs::remove_file(&path).map_err(|e| {
+                AppError::Other(
+                    t("Could not remove the autostart entry: {error}")
+                        .replace("{error}", &e.to_string()),
+                )
+            })?;
         }
         return Ok(());
     }
@@ -82,13 +81,12 @@ pub fn set_autostart(enabled: bool, exe_path: &str) -> Result<(), AppError> {
     let dir = path
         .parent()
         .ok_or_else(|| AppError::Other(t("Could not find the LaunchAgents folder").to_string()))?;
-    std::fs::create_dir_all(dir)
-        .map_err(|e| {
-            AppError::Other(
-                t("Could not create the LaunchAgents folder: {error}")
-                    .replace("{error}", &e.to_string()),
-            )
-        })?;
+    std::fs::create_dir_all(dir).map_err(|e| {
+        AppError::Other(
+            t("Could not create the LaunchAgents folder: {error}")
+                .replace("{error}", &e.to_string()),
+        )
+    })?;
 
     let plist = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -112,13 +110,11 @@ pub fn set_autostart(enabled: bool, exe_path: &str) -> Result<(), AppError> {
         exe = xml_escape(exe_path.trim().trim_matches('"')),
     );
 
-    std::fs::write(&path, plist)
-        .map_err(|e| {
-            AppError::Other(
-                t("Could not write the autostart entry: {error}")
-                    .replace("{error}", &e.to_string()),
-            )
-        })?;
+    std::fs::write(&path, plist).map_err(|e| {
+        AppError::Other(
+            t("Could not write the autostart entry: {error}").replace("{error}", &e.to_string()),
+        )
+    })?;
     Ok(())
 }
 
@@ -154,42 +150,37 @@ pub fn set_autostart(enabled: bool, exe_path: &str) -> Result<(), AppError> {
 
     if !enabled {
         if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| {
-                    AppError::Other(
-                        t("Could not remove the autostart entry: {error}")
-                            .replace("{error}", &e.to_string()),
-                    )
-                })?;
+            std::fs::remove_file(&path).map_err(|e| {
+                AppError::Other(
+                    t("Could not remove the autostart entry: {error}")
+                        .replace("{error}", &e.to_string()),
+                )
+            })?;
         }
         return Ok(());
     }
 
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| {
-            AppError::Other(
-                t("Could not create the autostart folder: {error}")
-                    .replace("{error}", &e.to_string()),
-            )
-        })?;
+    std::fs::create_dir_all(&dir).map_err(|e| {
+        AppError::Other(
+            t("Could not create the autostart folder: {error}").replace("{error}", &e.to_string()),
+        )
+    })?;
 
     let entry = format!(
         "[Desktop Entry]\n\
          Type=Application\n\
-         Name=Sakura Screen Translator\n\
+         Name=Screen Translator\n\
          Exec={exe}\n\
          Terminal=false\n\
          X-GNOME-Autostart-enabled=true\n",
         exe = exe_path.trim().trim_matches('"'),
     );
 
-    std::fs::write(&path, entry)
-        .map_err(|e| {
-            AppError::Other(
-                t("Could not write the autostart entry: {error}")
-                    .replace("{error}", &e.to_string()),
-            )
-        })?;
+    std::fs::write(&path, entry).map_err(|e| {
+        AppError::Other(
+            t("Could not write the autostart entry: {error}").replace("{error}", &e.to_string()),
+        )
+    })?;
     Ok(())
 }
 

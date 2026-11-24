@@ -52,7 +52,7 @@ fn parse_args() -> Args {
                 ),
             },
             "--help" | "-h" => {
-                println!("Sakura Screen Translator {}", env!("CARGO_PKG_VERSION"));
+                println!("Screen Translator {}", env!("CARGO_PKG_VERSION"));
                 println!();
                 println!("{}", t("Runs in the system tray."));
                 println!();
@@ -127,7 +127,7 @@ fn main() -> eframe::Result<()> {
         version = env!("CARGO_PKG_VERSION"),
         settings_page = ?args.open_settings,
         startup = ?args.startup,
-        "Sakura Screen Translator starting"
+        "Screen Translator starting"
     );
 
     // A second copy would fight the first over the tray icon and the hotkeys.
@@ -140,33 +140,15 @@ fn main() -> eframe::Result<()> {
     };
 
     features::updater::cleanup_previous_version();
+    const _: () = assert!(!features::updater::ENABLED);
 
     let options = NativeOptions {
-        viewport: ViewportBuilder::default()
-            .with_title("Sakura Screen Translator")
-            // The real UI lives in child viewports; this host window only needs
-            // to exist, so it is 1×1 and parked far off screen.
-            .with_inner_size([1.0, 1.0])
-            .with_position(egui::pos2(-32000.0, -32000.0))
-            .with_decorations(false)
-            .with_resizable(false)
-            .with_taskbar(false)
-            // A placeholder has no use for the keyboard, and an app that
-            // starts with the session should not take it from whatever the
-            // user was typing into.
-            .with_active(false)
-            // The GL configuration is chosen once, for this window, and every
-            // other window shares it. Where the toolkit handles transparency,
-            // asking for it here is what gives the floating views a surface
-            // they can be see-through on; without it they come up as opaque
-            // rectangles. Windows goes about it another way.
-            .with_transparent(features::capture::native::TOOLKIT_TRANSPARENCY)
-            .with_visible(true),
+        viewport: host_native_viewport(),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Sakura Screen Translator",
+        "Screen Translator",
         options,
         Box::new(move |cc| {
             Ok(Box::new(App::new(
@@ -177,6 +159,36 @@ fn main() -> eframe::Result<()> {
             )))
         }),
     )
+}
+
+/// The hidden host window eframe creates first.
+///
+/// Its icon matters on Windows: if this builder leaves `icon` unset, eframe
+/// injects its default white-"e" logo and later writes that as `ICON_BIG` on
+/// the active window (the settings window). The .ico resource in the
+/// executable is then ignored for the taskbar of a running instance.
+fn host_native_viewport() -> ViewportBuilder {
+    ViewportBuilder::default()
+        .with_title("Screen Translator")
+        // The real UI lives in child viewports; this host window only needs
+        // to exist, so it is 1×1 and parked far off screen.
+        .with_inner_size([1.0, 1.0])
+        .with_position(egui::pos2(-32000.0, -32000.0))
+        .with_decorations(false)
+        .with_resizable(false)
+        .with_taskbar(false)
+        .with_icon(features::tray::window_icon())
+        // A placeholder has no use for the keyboard, and an app that
+        // starts with the session should not take it from whatever the
+        // user was typing into.
+        .with_active(false)
+        // The GL configuration is chosen once, for this window, and every
+        // other window shares it. Where the toolkit handles transparency,
+        // asking for it here is what gives the floating views a surface
+        // they can be see-through on; without it they come up as opaque
+        // rectangles. Windows goes about it another way.
+        .with_transparent(features::capture::native::TOOLKIT_TRANSPARENCY)
+        .with_visible(true)
 }
 
 /// Per-monitor DPI awareness.
@@ -282,10 +294,7 @@ mod tests {
 
     #[test]
     fn an_area_on_a_monitor_left_of_the_primary_starts_below_zero() {
-        assert_eq!(
-            parse_area("-1920,0,800,600").map(|b| b.x),
-            Some(-1920)
-        );
+        assert_eq!(parse_area("-1920,0,800,600").map(|b| b.x), Some(-1920));
     }
 
     #[test]
@@ -293,5 +302,23 @@ mod tests {
         for bad in ["", "1,2,3", "1,2,3,4,5", "a,b,c,d", "0,0,0,10", "0,0,10,-5"] {
             assert_eq!(parse_area(bad), None, "{bad:?} was accepted");
         }
+    }
+}
+
+#[cfg(test)]
+mod host_viewport_tests {
+    use super::host_native_viewport;
+
+    #[test]
+    fn the_host_viewport_sets_the_translation_icon() {
+        // Guards the regression that left the taskbar showing eframe's "e".
+        let icon = host_native_viewport()
+            .icon
+            .expect("root viewport must set an icon, otherwise eframe injects its default e");
+        assert!(icon.width >= 32 && icon.height >= 32);
+        assert_eq!(icon.rgba.len(), (icon.width * icon.height * 4) as usize);
+        assert_ne!(*icon, egui::IconData::default());
+        // Transparent corner: not the opaque-black eframe logo tile.
+        assert_eq!(icon.rgba[3], 0);
     }
 }

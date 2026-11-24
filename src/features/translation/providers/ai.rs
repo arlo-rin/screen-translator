@@ -477,9 +477,7 @@ fn parse_anthropic(v: &Value) -> Result<String, AppError> {
         .collect();
 
     if text.is_empty() {
-        return Err(AppError::Other(
-            t("The response has no text blocks").into(),
-        ));
+        return Err(AppError::Other(t("The response has no text blocks").into()));
     }
     if v.get("stop_reason").and_then(Value::as_str) == Some("max_tokens") {
         warn!("The model ran out of output tokens; the translation may be cut short");
@@ -973,7 +971,8 @@ mod tests {
 
     #[test]
     fn empty_sections_mean_there_was_nothing_to_read() {
-        let r = parse_reading("<language></language><original></original><translation></translation>");
+        let r =
+            parse_reading("<language></language><original></original><translation></translation>");
         assert!(r.translated.is_empty());
     }
 
@@ -990,6 +989,10 @@ mod tests {
         assert_eq!(remembered_shape(&a), Shape::Full);
         remember_shape(&a, Shape::Minimal);
         assert_eq!(remembered_shape(&a), Shape::Minimal);
-        assert_eq!(remembered_shape(&b), Shape::Full, "one model's answer leaked to another");
+        assert_eq!(
+            remembered_shape(&b),
+            Shape::Full,
+            "one model's answer leaked to another"
+        );
     }
 }

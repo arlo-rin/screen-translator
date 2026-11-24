@@ -38,16 +38,14 @@ use egui::{
 use super::fit::{self, Grow};
 use super::{chrome, ResultAction, ResultUi, Stage};
 use crate::entities::settings::ResultView;
-use crate::features::capture::frame::{
-        blend, readable_on, Clearance, InkPrint, Rgb, TextColours,
-    };
+use crate::features::capture::frame::{blend, readable_on, Clearance, InkPrint, Rgb, TextColours};
 use crate::features::capture::{native, Bounds, Frame};
 use crate::features::translation::ocr::{Align, Line, PxRect};
 use crate::features::translation::PipelineResult;
 use crate::shared::i18n::t;
 use crate::ui::{icons, Theme};
 
-pub const TITLE: &str = "Sakura translation";
+pub const TITLE: &str = "Screen Translator";
 
 /// The least a plate reaches past its text, sideways and vertically.
 const PAD: Vec2 = Vec2::new(3.0, 2.0);
@@ -408,7 +406,15 @@ fn measure(
     if widest_word(ctx, text, size) > width {
         return Vec2::new(width, f32::INFINITY);
     }
-    let laid_out = galley(ctx, text, size, width, Color32::WHITE, egui::Align::Min, pitch);
+    let laid_out = galley(
+        ctx,
+        text,
+        size,
+        width,
+        Color32::WHITE,
+        egui::Align::Min,
+        pitch,
+    );
     if laid_out.rows.len() > most_rows {
         return Vec2::new(width, f32::INFINITY);
     }
@@ -469,9 +475,7 @@ fn within_surface(room: Rect, block: Rect, clear: Clearance, grow: Grow) -> Rect
     let (left, right) = if grow == Grow::Both {
         // Kept even on both sides, or it would stop being centred.
         let centre = block.center().x;
-        let half = (centre - left)
-            .min(right - centre)
-            .max(block.width() / 2.0);
+        let half = (centre - left).min(right - centre).max(block.width() / 2.0);
         (centre - half, centre + half)
     } else {
         (left.min(block.min.x), right.max(block.max.x))
@@ -553,11 +557,25 @@ fn place(
             }
         }
         if original.pitch.is_some() {
-            attempts.push(Attempt(comfortable, preferred, own, tall, original.pitch, ANY));
+            attempts.push(Attempt(
+                comfortable,
+                preferred,
+                own,
+                tall,
+                original.pitch,
+                ANY,
+            ));
         }
         attempts.push(Attempt(comfortable, preferred, own, tall, None, ANY));
         if original.pitch.is_some() {
-            attempts.push(Attempt(comfortable, preferred, wide, tall, original.pitch, ANY));
+            attempts.push(Attempt(
+                comfortable,
+                preferred,
+                wide,
+                tall,
+                original.pitch,
+                ANY,
+            ));
         }
         attempts.push(Attempt(comfortable, preferred, wide, tall, None, ANY));
         attempts.push(Attempt(tightest, comfortable, wide, tall, None, ANY));
@@ -646,6 +664,7 @@ impl ResultUi {
                         // this very window.
                         hidden_from_capture: self.watching,
                         translucent: live,
+                        ..Default::default()
                     },
                 );
                 native::place(TITLE, window);
@@ -1099,7 +1118,12 @@ impl ResultUi {
     }
 
     /// Every paragraph on a plate of its own, where it was.
-    fn layout_paragraphs(&self, ctx: &egui::Context, result: &PipelineResult, size: Vec2) -> Layout {
+    fn layout_paragraphs(
+        &self,
+        ctx: &egui::Context,
+        result: &PipelineResult,
+        size: Vec2,
+    ) -> Layout {
         let ppp = self.ppp;
         let bounds = Rect::from_min_size(Pos2::ZERO, size).shrink(1.0);
         // Where each paragraph really is. Everything below is worked out
@@ -1322,68 +1346,78 @@ impl ResultUi {
             .zip(texts)
             .zip(readings.iter().zip(&blocks))
             .zip(result.segments.iter().zip(&boxes))
-            .map(|(((rect, (text, pos, original_top)), (reading, block)), (segment, tight))| {
-                let sampled_at = block.expand(SAMPLED_OUTSIDE / ppp);
-                let in_pixels = |r: Rect| [r.min.x * ppp, r.min.y * ppp, r.width() * ppp, r.height() * ppp];
-                let plate = {
-                    // On whole pixels of the capture. A plate that ends part
-                    // of the way through one leaves the rest of it showing,
-                    // and a surface painted between pixels is a blurred one.
-                    let [x, y, w, h] = in_pixels(reading.margin.around(*rect));
-                    let (x0, y0) = (x.floor(), y.floor());
-                    let (x1, y1) = ((x + w).ceil(), (y + h).ceil());
-                    // Out to where the writing really ends: game type has
-                    // outlines and shadows the recogniser's box knows nothing of.
-                    let reach = (segment.glyph_height * 0.45).clamp(4.0, 24.0);
-                    let [left, top, right, bottom] = self.shot.as_ref().map_or([0.0; 4], |shot| {
-                        shot.overhang(
-                            [x0, y0, x1 - x0, y1 - y0],
-                            &reading.sampled,
-                            in_pixels(sampled_at),
+            .map(
+                |(((rect, (text, pos, original_top)), (reading, block)), (segment, tight))| {
+                    let sampled_at = block.expand(SAMPLED_OUTSIDE / ppp);
+                    let in_pixels = |r: Rect| {
+                        [
+                            r.min.x * ppp,
+                            r.min.y * ppp,
+                            r.width() * ppp,
+                            r.height() * ppp,
+                        ]
+                    };
+                    let plate = {
+                        // On whole pixels of the capture. A plate that ends part
+                        // of the way through one leaves the rest of it showing,
+                        // and a surface painted between pixels is a blurred one.
+                        let [x, y, w, h] = in_pixels(reading.margin.around(*rect));
+                        let (x0, y0) = (x.floor(), y.floor());
+                        let (x1, y1) = ((x + w).ceil(), (y + h).ceil());
+                        // Out to where the writing really ends: game type has
+                        // outlines and shadows the recogniser's box knows nothing of.
+                        let reach = (segment.glyph_height * 0.45).clamp(4.0, 24.0);
+                        let [left, top, right, bottom] =
+                            self.shot.as_ref().map_or([0.0; 4], |shot| {
+                                shot.overhang(
+                                    [x0, y0, x1 - x0, y1 - y0],
+                                    &reading.sampled,
+                                    in_pixels(sampled_at),
+                                    reach,
+                                )
+                            });
+                        tracing::debug!(
+                            plate = ?[x0, y0, x1 - x0, y1 - y0],
+                            sampled = ?in_pixels(sampled_at),
+                            corners = ?reading.sampled.corners,
                             reach,
+                            left,
+                            top,
+                            right,
+                            bottom,
+                            "Plate"
+                        );
+                        Rect::from_min_max(
+                            Pos2::new((x0 - left) / ppp, (y0 - top) / ppp),
+                            Pos2::new((x1 + right) / ppp, (y1 + bottom) / ppp),
                         )
-                    });
-                    tracing::debug!(
-                        plate = ?[x0, y0, x1 - x0, y1 - y0],
-                        sampled = ?in_pixels(sampled_at),
-                        corners = ?reading.sampled.corners,
-                        reach,
-                        left,
-                        top,
-                        right,
-                        bottom,
-                        "Plate"
-                    );
-                    Rect::from_min_max(
-                        Pos2::new((x0 - left) / ppp, (y0 - top) / ppp),
-                        Pos2::new((x1 + right) / ppp, (y1 + bottom) / ppp),
-                    )
-                };
-                // A caption is a thing of its own and stays a plain plate.
-                let healed = self
-                    .shot
-                    .as_ref()
-                    .filter(|_| !reading.caption)
-                    .and_then(|shot| {
-                        shot.healed(in_pixels(plate), &reading.sampled, in_pixels(sampled_at))
-                    })
-                    .map(|image| ctx.load_texture("plate", image, TextureOptions::LINEAR));
-                Plate {
-                    healed,
-                    source: if self.inplace.restless.contains(&segment.original) {
-                        None
-                    } else {
-                        self.source(*tight, reading.sampled)
-                    },
-                    rect: plate,
-                    rounding: if reading.caption { 6.0 } else { 2.0 },
-                    corners: plate_colours(reading.colours, sampled_at, plate),
-                    fill: colour(reading.colours.background),
-                    text,
-                    // Carried along with its plate if stacking moved it.
-                    text_pos: Pos2::new(pos.x, pos.y + (rect.min.y - original_top)),
-                }
-            })
+                    };
+                    // A caption is a thing of its own and stays a plain plate.
+                    let healed = self
+                        .shot
+                        .as_ref()
+                        .filter(|_| !reading.caption)
+                        .and_then(|shot| {
+                            shot.healed(in_pixels(plate), &reading.sampled, in_pixels(sampled_at))
+                        })
+                        .map(|image| ctx.load_texture("plate", image, TextureOptions::LINEAR));
+                    Plate {
+                        healed,
+                        source: if self.inplace.restless.contains(&segment.original) {
+                            None
+                        } else {
+                            self.source(*tight, reading.sampled)
+                        },
+                        rect: plate,
+                        rounding: if reading.caption { 6.0 } else { 2.0 },
+                        corners: plate_colours(reading.colours, sampled_at, plate),
+                        fill: colour(reading.colours.background),
+                        text,
+                        // Carried along with its plate if stacking moved it.
+                        text_pos: Pos2::new(pos.x, pos.y + (rect.min.y - original_top)),
+                    }
+                },
+            )
             .collect();
 
         // Translations that needed more lines than there was space for push
@@ -1484,10 +1518,7 @@ impl ResultUi {
                 text: laid_out,
                 // Centred vertically when there is room to spare, the way a
                 // line of dialogue sits in its box.
-                text_pos: Pos2::new(
-                    PLATE_PAD.x,
-                    ((height - text_height) / 2.0).max(PLATE_PAD.y),
-                ),
+                text_pos: Pos2::new(PLATE_PAD.x, ((height - text_height) / 2.0).max(PLATE_PAD.y)),
             }],
             filler: colour(colours.background),
         }
@@ -1650,9 +1681,27 @@ mod tests {
 
     /// A result over a watched area, one paragraph to each text.
     fn watched(texts: &[&str]) -> ResultUi {
-        let screen = Bounds { x: 0, y: 0, w: 1920, h: 1080 };
-        let area = Bounds { x: 100, y: 100, w: 400, h: 300 };
-        let mut ui = ResultUi::new(ResultView::Inline, area, Monitor { bounds: screen, work: screen }, 1.0);
+        let screen = Bounds {
+            x: 0,
+            y: 0,
+            w: 1920,
+            h: 1080,
+        };
+        let area = Bounds {
+            x: 100,
+            y: 100,
+            w: 400,
+            h: 300,
+        };
+        let mut ui = ResultUi::new(
+            ResultView::Inline,
+            area,
+            Monitor {
+                bounds: screen,
+                work: screen,
+            },
+            1.0,
+        );
         let segments = texts
             .iter()
             .enumerate()
@@ -1668,10 +1717,16 @@ mod tests {
             })
             .collect();
         ui.set_stage(Stage::Done(Box::new(PipelineResult {
-            original: texts.join("
-"),
-            translated: texts.join("
-").to_lowercase(),
+            original: texts.join(
+                "
+",
+            ),
+            translated: texts
+                .join(
+                    "
+",
+                )
+                .to_lowercase(),
             segments,
             engine: EngineKind::Google,
             source: Language::En,
@@ -1697,11 +1752,18 @@ mod tests {
     #[test]
     fn restless_texts_are_remembered_once_each_and_not_without_end() {
         let mut ui = watched(&[]);
-        ui.keep_up(vec!["SUPPORT ME".into(), "DISCORD".into(), "SUPPORT ME".into()]);
+        ui.keep_up(vec![
+            "SUPPORT ME".into(),
+            "DISCORD".into(),
+            "SUPPORT ME".into(),
+        ]);
         assert_eq!(ui.inplace.restless, ["SUPPORT ME", "DISCORD"]);
         ui.keep_up((0..100).map(|i| format!("line {i}")).collect());
         assert_eq!(ui.inplace.restless.len(), MOST_RESTLESS);
-        assert_eq!(ui.inplace.restless.last().map(String::as_str), Some("line 99"));
+        assert_eq!(
+            ui.inplace.restless.last().map(String::as_str),
+            Some("line 99")
+        );
     }
 
     fn clear(left: f32, right: f32, below: f32) -> Clearance {
@@ -1739,7 +1801,10 @@ mod tests {
     fn washed_out_sampled_colours_are_replaced_by_something_legible() {
         let pale = TextColours::flat(Rgb(250, 250, 250), Rgb(205, 205, 205));
         let fixed = legible(pale);
-        assert_eq!(fixed.background, pale.background, "the surface must not change");
+        assert_eq!(
+            fixed.background, pale.background,
+            "the surface must not change"
+        );
         assert_eq!(fixed.corners, pale.corners, "the surface must not change");
         assert!(fixed.text.contrast(fixed.background) >= 4.5);
     }
@@ -1778,7 +1843,12 @@ mod tests {
         // Black on the left edge of the paragraph, white on the right, and a
         // plate half as wide again on either side.
         let colours = TextColours {
-            corners: [Rgb(100, 100, 100), Rgb(200, 200, 200), Rgb(100, 100, 100), Rgb(200, 200, 200)],
+            corners: [
+                Rgb(100, 100, 100),
+                Rgb(200, 200, 200),
+                Rgb(100, 100, 100),
+                Rgb(200, 200, 200),
+            ],
             ..TextColours::flat(Rgb(150, 150, 150), Rgb(255, 255, 255))
         };
         let sampled_at = rect(100.0, 0.0, 100.0, 20.0);
@@ -1792,10 +1862,19 @@ mod tests {
     fn a_plate_on_a_flat_surface_is_exactly_one_colour() {
         // Corners a few levels apart: noise, not a gradient.
         let colours = TextColours {
-            corners: [Rgb(24, 28, 44), Rgb(25, 28, 45), Rgb(24, 27, 44), Rgb(24, 28, 43)],
+            corners: [
+                Rgb(24, 28, 44),
+                Rgb(25, 28, 45),
+                Rgb(24, 27, 44),
+                Rgb(24, 28, 43),
+            ],
             ..TextColours::flat(Rgb(24, 28, 44), Rgb(255, 255, 255))
         };
-        let corners = plate_colours(colours, rect(0.0, 0.0, 10.0, 10.0), rect(0.0, 0.0, 90.0, 10.0));
+        let corners = plate_colours(
+            colours,
+            rect(0.0, 0.0, 10.0, 10.0),
+            rect(0.0, 0.0, 90.0, 10.0),
+        );
         assert!(corners.iter().all(|c| *c == Color32::from_rgb(24, 28, 44)));
     }
 

@@ -48,9 +48,7 @@ pub async fn translate(req: &TranslateRequest, allow_headless: bool) -> Result<S
     debug!(error = %api_error, "Yandex API failed, trying the browser");
     match headless(req).await {
         Ok(text) if !text.trim().is_empty() => Ok(text),
-        Ok(_) => Err(AppError::Other(
-            t("headless: empty response").to_string(),
-        )),
+        Ok(_) => Err(AppError::Other(t("headless: empty response").to_string())),
         Err(e) => {
             warn!(api = %api_error, browser = %e, "Both Yandex paths failed");
             Err(e)
@@ -223,9 +221,7 @@ async fn headless(req: &TranslateRequest) -> Result<String, AppError> {
         .arg("--disable-dev-shm-usage")
         .build()
         .map_err(|e| {
-            AppError::Other(
-                t("Browser configuration: {error}").replace("{error}", &e.to_string()),
-            )
+            AppError::Other(t("Browser configuration: {error}").replace("{error}", &e.to_string()))
         })?;
 
     let (mut browser, mut handler) = Browser::launch(config).await.map_err(|e| {

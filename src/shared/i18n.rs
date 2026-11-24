@@ -23,7 +23,9 @@ mod tables;
 ///
 /// Ordered the way the settings list shows them: English first as the source
 /// language, then the rest alphabetically by their own name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Lang {
     En,
     De,
@@ -110,7 +112,6 @@ impl Lang {
             .to_ascii_lowercase();
         Lang::ALL.into_iter().find(|l| l.code() == primary)
     }
-
 }
 
 /// Current language, as a `Lang` discriminant. Read on every string lookup, so
@@ -232,7 +233,11 @@ mod tests {
     fn no_translation_is_left_empty() {
         for lang in Lang::ALL {
             for (key, value) in tables::for_lang(lang) {
-                assert!(!value.trim().is_empty(), "{} has no text for {key:?}", lang.code());
+                assert!(
+                    !value.trim().is_empty(),
+                    "{} has no text for {key:?}",
+                    lang.code()
+                );
             }
         }
     }

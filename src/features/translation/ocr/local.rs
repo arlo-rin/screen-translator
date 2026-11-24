@@ -75,7 +75,10 @@ fn choose(installed: &[Language], source: Language, target: Language) -> Option<
     if target != Language::En && installed.contains(&Language::En) {
         return Some(Language::En);
     }
-    installed.iter().copied().find(|language| *language != target)
+    installed
+        .iter()
+        .copied()
+        .find(|language| *language != target)
 }
 
 /// What to say when text was to be read on this machine only and it has no
@@ -106,7 +109,11 @@ fn prepared(frame: &Frame) -> Prepared<'_> {
     let scale = enlargement(w, h);
     // A whole display is left as it is: nothing on it is hard against the
     // edge, and a copy of it is fifteen megabytes.
-    let margin = if w * h * scale * scale <= 2_000_000 { 16 } else { 0 };
+    let margin = if w * h * scale * scale <= 2_000_000 {
+        16
+    } else {
+        0
+    };
     if scale == 1 && margin == 0 {
         return Prepared {
             rgba: Cow::Borrowed(frame.rgba()),
@@ -281,9 +288,8 @@ pub fn read(frame: &Frame, language: Language) -> Result<Recognised, AppError> {
     // The picture as it is has to have been read; the other two only add to
     // it, and a reading that failed adds nothing. Why one failed has gone to
     // the log; the screen only needs to know that it did.
-    let plain = plain.map_err(|_| {
-        AppError::Other(t("Text recognition is unavailable right now").to_string())
-    })?;
+    let plain = plain
+        .map_err(|_| AppError::Other(t("Text recognition is unavailable right now").to_string()))?;
     let extra = |reading: std::thread::Result<Result<Vec<WordLine>, String>>| {
         reading.ok().and_then(Result::ok).unwrap_or_default()
     };
@@ -402,7 +408,10 @@ mod engine {
     static IDLE: Lazy<Mutex<HashMap<String, Vec<OcrEngine>>>> = Lazy::new(Default::default);
 
     fn borrow(tag: &str) -> windows::core::Result<OcrEngine> {
-        let waiting = IDLE.lock().ok().and_then(|mut idle| idle.get_mut(tag)?.pop());
+        let waiting = IDLE
+            .lock()
+            .ok()
+            .and_then(|mut idle| idle.get_mut(tag)?.pop());
         match waiting {
             Some(engine) => Ok(engine),
             None => OcrEngine::TryCreateFromLanguage(&Tongue::CreateLanguage(&HSTRING::from(tag))?),
@@ -415,7 +424,12 @@ mod engine {
         }
     }
 
-    pub fn read(tag: &str, picture: Picture<'_>, w: usize, h: usize) -> Result<Vec<WordLine>, String> {
+    pub fn read(
+        tag: &str,
+        picture: Picture<'_>,
+        w: usize,
+        h: usize,
+    ) -> Result<Vec<WordLine>, String> {
         let engine = borrow(tag).map_err(|e| e.to_string())?;
         let outcome = (|| {
             let bitmap = bitmap(&picture, w, h)?;
@@ -432,7 +446,8 @@ mod engine {
             Picture::Colour(_) => (BitmapPixelFormat::Bgra8, 4),
             Picture::Grey(_) => (BitmapPixelFormat::Gray8, 1),
         };
-        let bitmap = SoftwareBitmap::CreateWithAlpha(format, w as i32, h as i32, BitmapAlphaMode::Ignore)?;
+        let bitmap =
+            SoftwareBitmap::CreateWithAlpha(format, w as i32, h as i32, BitmapAlphaMode::Ignore)?;
         {
             let buffer = bitmap.LockBuffer(BitmapBufferAccessMode::Write)?;
             let plane = buffer.GetPlaneDescription(0)?;
@@ -442,10 +457,15 @@ mod engine {
             // SAFETY: the reference is alive for as long as the slice made
             // from it is used, and the bitmap is locked for writing.
             unsafe { access.GetBuffer(&mut data, &mut capacity)? };
-            let (start, stride) = (plane.StartIndex.max(0) as usize, plane.Stride.max(0) as usize);
+            let (start, stride) = (
+                plane.StartIndex.max(0) as usize,
+                plane.Stride.max(0) as usize,
+            );
             let needed = start + stride * h.saturating_sub(1) + w * each;
             if data.is_null() || stride < w * each || (capacity as usize) < needed {
-                return Err(windows::core::Error::from(windows::Win32::Foundation::E_UNEXPECTED));
+                return Err(windows::core::Error::from(
+                    windows::Win32::Foundation::E_UNEXPECTED,
+                ));
             }
             // SAFETY: `capacity` bytes at `data` are the bitmap's own, and
             // every row written below was checked to lie inside them.
@@ -496,10 +516,18 @@ mod engine {
                 if text.trim().is_empty() || rect.Width <= 0.0 || rect.Height <= 0.0 {
                     continue;
                 }
-                let (dx, dy) = (rect.X + rect.Width / 2.0 - cx, rect.Y + rect.Height / 2.0 - cy);
+                let (dx, dy) = (
+                    rect.X + rect.Width / 2.0 - cx,
+                    rect.Y + rect.Height / 2.0 - cy,
+                );
                 let (x, y) = (cx + dx * cos - dy * sin, cy + dx * sin + dy * cos);
                 words.push(Word {
-                    rect: PxRect::new(x - rect.Width / 2.0, y - rect.Height / 2.0, rect.Width, rect.Height),
+                    rect: PxRect::new(
+                        x - rect.Width / 2.0,
+                        y - rect.Height / 2.0,
+                        rect.Width,
+                        rect.Height,
+                    ),
                     text,
                 });
             }
@@ -531,7 +559,12 @@ mod engine {
         0
     }
 
-    pub fn read(_tag: &str, picture: Picture<'_>, _w: usize, _h: usize) -> Result<Vec<WordLine>, String> {
+    pub fn read(
+        _tag: &str,
+        picture: Picture<'_>,
+        _w: usize,
+        _h: usize,
+    ) -> Result<Vec<WordLine>, String> {
         let (Picture::Colour(px) | Picture::Grey(px)) = picture;
         let _ = px;
         Err("no recogniser on this platform".to_string())
@@ -595,7 +628,9 @@ mod tests {
         let picture = prepared(&shot);
         assert_eq!((picture.w, picture.h), (332, 232));
         assert_eq!((picture.scale, picture.margin), (1.0, 16.0));
-        let at = |x: usize, y: usize| &picture.rgba[(y * picture.w + x) * 4..(y * picture.w + x) * 4 + 4];
+        let at = |x: usize, y: usize| {
+            &picture.rgba[(y * picture.w + x) * 4..(y * picture.w + x) * 4 + 4]
+        };
         // The capture itself, moved in by the margin.
         assert_eq!(at(16, 16), [0, 0, 7, 255]);
         assert_eq!(at(16 + 299, 16 + 199), [43, 199, 7, 255]);
@@ -634,7 +669,10 @@ mod tests {
         let shot = frame(2000, 1200);
         let picture = prepared(&shot);
         assert!(matches!(picture.rgba, Cow::Borrowed(_)));
-        assert_eq!((picture.w, picture.h, picture.scale, picture.margin), (2000, 1200, 1.0, 0.0));
+        assert_eq!(
+            (picture.w, picture.h, picture.scale, picture.margin),
+            (2000, 1200, 1.0, 0.0)
+        );
     }
 
     /// Reads pictures from disk with the recogniser of the machine the test
@@ -663,7 +701,12 @@ mod tests {
             let image = image::open(path).expect("picture").to_rgba8();
             let (w, h) = image.dimensions();
             let shot = Frame::from_rgba(
-                Bounds { x: 0, y: 0, w: w as i32, h: h as i32 },
+                Bounds {
+                    x: 0,
+                    y: 0,
+                    w: w as i32,
+                    h: h as i32,
+                },
                 image.into_raw(),
             );
             // Twice: the first read of a language also loads its model.

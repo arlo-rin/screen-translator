@@ -13,6 +13,7 @@
 ///
 /// Both strings are treated as data: they are passed as arguments or through
 /// escaping, never interpolated into a shell command or a script.
+#[allow(dead_code)]
 pub fn show(title: &str, body: &str) {
     #[cfg(windows)]
     windows_toast(title, body);
@@ -23,6 +24,7 @@ pub fn show(title: &str, body: &str) {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 fn windows_toast(title: &str, body: &str) {
     use tauri_winrt_notification::{Duration, Sound, Toast};
 
@@ -82,7 +84,7 @@ fn freedesktop_notification(title: &str, body: &str) {
     // Arguments, not a command line, so nothing in the text is interpreted.
     spawn_detached(
         "notify-send",
-        &["--app-name=Sakura Screen Translator", title, body],
+        &["--app-name=Screen Translator", title, body],
     );
 }
 
@@ -116,10 +118,7 @@ mod tests {
 
     #[test]
     fn a_quote_cannot_end_the_literal() {
-        assert_eq!(
-            applescript_string(r#"say "hi""#),
-            r#""say \"hi\"""#
-        );
+        assert_eq!(applescript_string(r#"say "hi""#), r#""say \"hi\"""#);
     }
 
     #[test]

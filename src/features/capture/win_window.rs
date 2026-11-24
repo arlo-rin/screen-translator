@@ -25,14 +25,14 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{BOOL, COLORREF, HANDLE, HWND, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{
     DwmEnableBlurBehindWindow, DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED,
-    DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_BB_BLURREGION, DWM_BB_ENABLE,
-    DWM_BLURBEHIND, DWM_WINDOW_CORNER_PREFERENCE,
+    DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND,
+    DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND, DWM_WINDOW_CORNER_PREFERENCE,
 };
 use windows::Win32::Graphics::Gdi::{CreateRectRgn, DeleteObject};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetCursorPos, GetLayeredWindowAttributes, GetPropW, GetWindowDisplayAffinity,
-    GetWindowLongW, GetWindowRect, SetLayeredWindowAttributes, SetPropW,
+    GetWindowLongW, GetWindowRect, IsZoomed, SetLayeredWindowAttributes, SetPropW,
     SetWindowDisplayAffinity, SetWindowLongW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST,
     LAYERED_WINDOW_ATTRIBUTES_FLAGS, SWP_NOACTIVATE, SWP_NOOWNERZORDER, WDA_EXCLUDEFROMCAPTURE,
     WDA_NONE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
@@ -56,6 +56,9 @@ pub struct Behaviour {
     pub hidden_from_capture: bool,
     /// Blended with what is behind it, pixel by pixel, by its own alpha.
     pub translucent: bool,
+    /// Keeps Windows 11's native 1 px DWM window outline aligned with the app's
+    /// dark or light theme.
+    pub dark: Option<bool>,
 }
 
 fn find(title: &str) -> Option<HWND> {
@@ -92,12 +95,26 @@ pub fn apply(title: &str, behaviour: Behaviour) -> bool {
         );
 
         if behaviour.rounded {
-            let preference = DWMWCP_ROUND;
+            let preference = if IsZoomed(hwnd).as_bool() {
+                DWMWCP_DONOTROUND
+            } else {
+                DWMWCP_ROUND
+            };
             let _ = DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_WINDOW_CORNER_PREFERENCE,
                 &preference as *const DWM_WINDOW_CORNER_PREFERENCE as *const _,
                 std::mem::size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
+            );
+        }
+
+        if let Some(dark) = behaviour.dark {
+            let use_dark = BOOL::from(dark);
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &use_dark as *const BOOL as *const _,
+                std::mem::size_of::<BOOL>() as u32,
             );
         }
 
@@ -146,12 +163,8 @@ unsafe fn draw_if_layered(hwnd: HWND) {
     // Fails for exactly one reason: nobody has said yet.
     let told = GetLayeredWindowAttributes(hwnd, None, None, None).is_ok();
     if !told {
-        let _ = SetLayeredWindowAttributes(
-            hwnd,
-            COLORREF(0),
-            0,
-            LAYERED_WINDOW_ATTRIBUTES_FLAGS(0),
-        );
+        let _ =
+            SetLayeredWindowAttributes(hwnd, COLORREF(0), 0, LAYERED_WINDOW_ATTRIBUTES_FLAGS(0));
     }
 }
 

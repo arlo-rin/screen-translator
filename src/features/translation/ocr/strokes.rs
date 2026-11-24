@@ -286,7 +286,9 @@ mod tests {
 
     #[test]
     fn brightness_weighs_green_most() {
-        let rgba = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255];
+        let rgba = [
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+        ];
         let gray = Gray::of_rgba(&rgba, 4, 1);
         assert!(gray.px[1] > gray.px[0] && gray.px[0] > gray.px[2]);
         assert_eq!(gray.px[3], 255);

@@ -31,13 +31,7 @@ pub struct Fit {
 /// is the expensive part, so the search is a bisection over half-point steps —
 /// half a dozen layouts instead of one per candidate size. Text only gets
 /// taller as the type grows, which is what makes bisecting valid.
-pub fn fit(
-    min: f32,
-    max: f32,
-    width: f32,
-    height: f32,
-    measure: impl Fn(f32, f32) -> Vec2,
-) -> Fit {
+pub fn fit(min: f32, max: f32, width: f32, height: f32, measure: impl Fn(f32, f32) -> Vec2) -> Fit {
     const STEP: f32 = 0.5;
     let max = max.max(min);
 
@@ -366,7 +360,13 @@ mod tests {
     #[test]
     fn a_lone_block_may_use_the_rest_of_the_window() {
         let bounds = rect(0.0, 0.0, 600.0, 200.0);
-        let room = room_for(0, &[rect(20.0, 30.0, 200.0, 20.0)], bounds, 4.0, Grow::Right);
+        let room = room_for(
+            0,
+            &[rect(20.0, 30.0, 200.0, 20.0)],
+            bounds,
+            4.0,
+            Grow::Right,
+        );
         assert_eq!(room.min, Pos2::new(20.0, 30.0));
         assert_eq!(room.max, Pos2::new(600.0, 200.0));
     }
@@ -389,7 +389,10 @@ mod tests {
     #[test]
     fn a_block_off_to_the_side_below_does_not_limit_the_height() {
         // Underneath, but entirely to the left of where this one can reach.
-        let blocks = [rect(300.0, 30.0, 100.0, 20.0), rect(20.0, 80.0, 100.0, 20.0)];
+        let blocks = [
+            rect(300.0, 30.0, 100.0, 20.0),
+            rect(20.0, 80.0, 100.0, 20.0),
+        ];
         let room = room_for(0, &blocks, rect(0.0, 0.0, 600.0, 200.0), 4.0, Grow::Right);
         assert_eq!(room.max.y, 200.0);
     }
@@ -407,7 +410,10 @@ mod tests {
     #[test]
     fn a_right_aligned_block_grows_to_the_left_and_keeps_its_right_edge() {
         // A value at the end of a row, with its label at the start of it.
-        let blocks = [rect(790.0, 30.0, 130.0, 20.0), rect(80.0, 30.0, 110.0, 20.0)];
+        let blocks = [
+            rect(790.0, 30.0, 130.0, 20.0),
+            rect(80.0, 30.0, 110.0, 20.0),
+        ];
         let room = room_for(0, &blocks, rect(0.0, 0.0, 1000.0, 200.0), 4.0, Grow::Left);
         assert_eq!(room.max.x, 920.0, "the right edge moved");
         assert_eq!(room.min.x, 194.0, "it should stop short of the label");

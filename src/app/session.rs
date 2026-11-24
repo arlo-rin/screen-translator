@@ -45,8 +45,8 @@ use crate::entities::settings::{CaptureMode, Recogniser, ResultView};
 use crate::features::capture::frame::Signature;
 use crate::features::capture::overlay::{self, Purpose};
 use crate::features::capture::{
-    capture_desktop, capture_frame, cursor_position, foreground_window_bounds, monitor_for,
-    native, too_small, virtual_desktop, window_pick, Bounds, Frame, Geometry, OverlayState,
+    capture_desktop, capture_frame, cursor_position, foreground_window_bounds, monitor_for, native,
+    too_small, virtual_desktop, window_pick, Bounds, Frame, Geometry, OverlayState,
 };
 use crate::features::translation::ocr::local;
 use crate::features::translation::{
@@ -458,16 +458,15 @@ impl Watch {
         // The cheap way: as soon as the picture differs from the one that
         // was last read, at rest or not.
         let differs = from_read >= CHANGED || self.outlived;
-        let cheap = (differs && now.duration_since(self.last_here) >= self.gap_here()).then_some(
-            Read {
+        let cheap =
+            (differs && now.duration_since(self.last_here) >= self.gap_here()).then_some(Read {
                 reason: if settled {
                     Reason::Settled
                 } else {
                     Reason::Moving
                 },
                 online: false,
-            },
-        );
+            });
 
         match means {
             Means::Online => dear,
@@ -731,7 +730,10 @@ impl App {
                 );
             }
         }
-        debug!(count = windows.len(), "Window list captured for the overlay");
+        debug!(
+            count = windows.len(),
+            "Window list captured for the overlay"
+        );
 
         self.overlay = Some(
             OverlayState::new(geometry, mode, purpose, self.settings.show_mode_hud)
@@ -1311,7 +1313,10 @@ impl App {
         // Read on this machine, a look is also what decides that it is time
         // to read: the sooner the look, the sooner a new line is noticed.
         let means = self.means();
-        let read_here = self.watch.as_ref().is_some_and(|watch| watch.reads_here(means));
+        let read_here = self
+            .watch
+            .as_ref()
+            .is_some_and(|watch| watch.reads_here(means));
         if read_here {
             chosen.min(QUICK_LOOK)
         } else if painted_over {
@@ -1349,7 +1354,10 @@ mod tests {
         let shot = frame(20, true);
         let mut watch = Watch::new(&shot, CaptureKind::Region);
         let start = Instant::now();
-        assert_eq!(watch.should_read(&shot.signature(), later(start, 5000)), None);
+        assert_eq!(
+            watch.should_read(&shot.signature(), later(start, 5000)),
+            None
+        );
     }
 
     #[test]
@@ -1361,7 +1369,10 @@ mod tests {
 
         // The first look that differs: changed, but not yet seen twice the
         // same — it might still be appearing.
-        assert_eq!(watch.should_read(&after.signature(), later(start, 1500)), None);
+        assert_eq!(
+            watch.should_read(&after.signature(), later(start, 1500)),
+            None
+        );
         // The next look finds the same picture: settled.
         assert_eq!(
             watch.should_read(&after.signature(), later(start, 2500)),
@@ -1376,10 +1387,18 @@ mod tests {
         let mut watch = Watch::new(&before, CaptureKind::Region);
         let start = Instant::now();
 
-        assert_eq!(watch.should_read(&after.signature(), later(start, 100)), None);
+        assert_eq!(
+            watch.should_read(&after.signature(), later(start, 100)),
+            None
+        );
         // Settled, but only 200 ms after the watch began.
-        assert_eq!(watch.should_read(&after.signature(), later(start, 200)), None);
-        assert!(watch.should_read(&after.signature(), later(start, 1300)).is_some());
+        assert_eq!(
+            watch.should_read(&after.signature(), later(start, 200)),
+            None
+        );
+        assert!(watch
+            .should_read(&after.signature(), later(start, 1300))
+            .is_some());
     }
 
     #[test]
@@ -1516,7 +1535,10 @@ mod tests {
                 reads += 1;
             }
         }
-        assert!((4..=7).contains(&reads), "read {reads} times in five seconds");
+        assert!(
+            (4..=7).contains(&reads),
+            "read {reads} times in five seconds"
+        );
     }
 
     #[test]
@@ -1526,20 +1548,33 @@ mod tests {
         // A whole display: a second between two readings as a rule.
         watch.learnt(reading(true, 150));
         watch.last_text = Some("The pass is closed.".into());
-        assert_eq!(watch.look(&moving(1), later(start, 500), Means::Either), None);
+        assert_eq!(
+            watch.look(&moving(1), later(start, 500), Means::Either),
+            None
+        );
         let seen = moving(2);
-        let read = watch.look(&seen, later(start, 1000), Means::Either).expect("due");
+        let read = watch
+            .look(&seen, later(start, 1000), Means::Either)
+            .expect("due");
         watch.began(seen, later(start, 1000), read);
 
         // It comes back with words nobody has seen: the next look reads.
         watch.held("You will have to wait.".into(), later(start, 1150));
         let seen = moving(3);
-        let read = watch.look(&seen, later(start, 1250), Means::Either).expect("at once");
+        let read = watch
+            .look(&seen, later(start, 1250), Means::Either)
+            .expect("at once");
         watch.began(seen, later(start, 1250), read);
 
         // Still changing: a line being typed out. That is not hurried.
-        watch.held("You will have to wait here until".into(), later(start, 1400));
-        assert_eq!(watch.look(&moving(4), later(start, 1500), Means::Either), None);
+        watch.held(
+            "You will have to wait here until".into(),
+            later(start, 1400),
+        );
+        assert_eq!(
+            watch.look(&moving(4), later(start, 1500), Means::Either),
+            None
+        );
     }
 
     #[test]
@@ -1553,7 +1588,9 @@ mod tests {
 
         // The picture as a whole has not moved; the words under a plate have.
         watch.translation_outlived(true);
-        assert!(watch.look(&same, later(start, 1250), Means::Either).is_some());
+        assert!(watch
+            .look(&same, later(start, 1250), Means::Either)
+            .is_some());
         watch.began(same.clone(), later(start, 1250), HERE);
         // And it stays that way without being a reason every time.
         watch.translation_outlived(true);
@@ -1567,7 +1604,10 @@ mod tests {
         let start = watch.last_look;
         watch.learnt(reading(true, 10));
         for step in 1..=8u64 {
-            assert_eq!(watch.look(&shot.signature(), later(start, step * 250), Means::Here), None);
+            assert_eq!(
+                watch.look(&shot.signature(), later(start, step * 250), Means::Here),
+                None
+            );
         }
     }
 
@@ -1597,7 +1637,11 @@ mod tests {
         // …and the online one was asked when it would have been anyway: not
         // before a picture in motion is overdue, and then at growing gaps.
         assert!(online[0] >= 3000, "asked online after {} ms", online[0]);
-        assert!(online.len() <= 3, "asked online {} times in ten seconds", online.len());
+        assert!(
+            online.len() <= 3,
+            "asked online {} times in ten seconds",
+            online.len()
+        );
     }
 
     #[test]
@@ -1614,7 +1658,10 @@ mod tests {
         assert!(watch.not_for_here);
         let start = watch.last_look;
         // No more tries here in between: only what the online way allows.
-        assert_eq!(watch.look(&moving(1), later(start, 300), Means::Either), None);
+        assert_eq!(
+            watch.look(&moving(1), later(start, 300), Means::Either),
+            None
+        );
 
         // Until it does read something, on a reading made for the other.
         watch.learnt(reading(true, 12));
@@ -1626,7 +1673,10 @@ mod tests {
         let mut watch = Watch::new(&frame(20, false), CaptureKind::Region);
         let start = watch.last_look;
         assert!(watch.reads_here(Means::Here));
-        assert_eq!(watch.look(&moving(1), later(start, 300), Means::Here), Some(HERE));
+        assert_eq!(
+            watch.look(&moving(1), later(start, 300), Means::Here),
+            Some(HERE)
+        );
         // And with nothing to read here with at all, there is only online.
         assert!(!watch.reads_here(Means::Online));
     }
@@ -1638,7 +1688,9 @@ mod tests {
         watch.last_text = Some("The pass is closed.".into());
 
         // Over a picture in motion, what was read has to be read again.
-        let terms = watch.terms(HERE, later(start, 300)).expect("a reading made here");
+        let terms = watch
+            .terms(HERE, later(start, 300))
+            .expect("a reading made here");
         assert!(!terms.settled && !terms.online && terms.may_translate);
         assert_eq!(terms.shown.as_deref(), Some("The pass is closed."));
         assert_eq!(terms.heard, None);
@@ -1695,7 +1747,10 @@ mod tests {
             }
         }
         // Six at once, and one every two seconds after that.
-        assert!((30..=36).contains(&spent), "{spent} translations in a minute");
+        assert!(
+            (30..=36).contains(&spent),
+            "{spent} translations in a minute"
+        );
         // Left alone, it fills up again — and no further than it began.
         let mut later_on = allowance;
         assert!(later_on.has(later(start, 120_000)));
@@ -1709,8 +1764,14 @@ mod tests {
         watch.learnt(reading(true, 10));
         watch.began(moving(1), later(start, 300), HERE);
         watch.failed();
-        assert_eq!(watch.look(&moving(2), later(start, 600), Means::Either), None);
-        assert_eq!(watch.look(&moving(3), later(start, 1400), Means::Either), Some(HERE));
+        assert_eq!(
+            watch.look(&moving(2), later(start, 600), Means::Either),
+            None
+        );
+        assert_eq!(
+            watch.look(&moving(3), later(start, 1400), Means::Either),
+            Some(HERE)
+        );
     }
 
     #[test]
@@ -1737,11 +1798,18 @@ mod tests {
         let reads = reads_of_a_restless_scene();
         assert!(reads.len() >= 3, "{reads:?}");
         // A minute of nothing but motion: a handful of reads, not twenty.
-        assert!(reads.len() <= 8, "read {} times in a minute: {reads:?}", reads.len());
+        assert!(
+            reads.len() <= 8,
+            "read {} times in a minute: {reads:?}",
+            reads.len()
+        );
         let gaps: Vec<u64> = reads.windows(2).map(|pair| pair[1] - pair[0]).collect();
         assert!(gaps.windows(2).all(|pair| pair[1] >= pair[0]), "{gaps:?}");
         assert!(*gaps.last().unwrap() >= 10_000, "{gaps:?}");
-        assert!(gaps.iter().all(|gap| *gap <= 15_000), "the wait has a ceiling: {gaps:?}");
+        assert!(
+            gaps.iter().all(|gap| *gap <= 15_000),
+            "the wait has a ceiling: {gaps:?}"
+        );
     }
 
     #[test]
@@ -1795,7 +1863,10 @@ mod tests {
             .expect("settled by the second look");
         watch.sent(after.signature(), later(start, 2500), reason);
 
-        assert_eq!(watch.should_read(&after.signature(), later(start, 9000)), None);
+        assert_eq!(
+            watch.should_read(&after.signature(), later(start, 9000)),
+            None
+        );
     }
 
     #[test]

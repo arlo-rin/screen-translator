@@ -126,6 +126,15 @@ pub fn app_icon(size: u32) -> egui::IconData {
     }
 }
 
+/// The icon eframe should put on native windows (taskbar, alt-tab).
+///
+/// eframe injects its default white-"e" logo whenever the root viewport has
+/// no icon, and on Windows that setter writes `ICON_BIG` on the active
+/// window. A child viewport's `with_icon` is not enough on its own.
+pub fn window_icon() -> std::sync::Arc<egui::IconData> {
+    std::sync::Arc::new(app_icon(256))
+}
+
 /// macOS and Linux, on `tray-icon` — an `NSStatusItem` on macOS, a
 /// StatusNotifierItem (or the appindicator fallback) on Linux.
 ///
@@ -148,10 +157,10 @@ mod portable {
     use crate::shared::i18n::t;
     use crate::ui::spin::Spin;
 
-    const TOOLTIP_IDLE: &str = "Sakura Screen Translator";
+    const TOOLTIP_IDLE: &str = "Screen Translator";
 
     fn tooltip_busy() -> &'static str {
-        t("Sakura Screen Translator — translating…")
+        t("Screen Translator — translating…")
     }
 
     /// Size of the rasterised mark. Both platforms scale it down themselves;
@@ -317,14 +326,26 @@ mod portable {
         ctx: egui::Context,
         visible: bool,
     ) -> (Control, Option<thread::JoinHandle<()>>) {
-        let region = MenuItem::new(label(CaptureMode::Region.label_menu(), &hotkeys.region), true, None);
-        let window = MenuItem::new(label(CaptureMode::Window.label_menu(), &hotkeys.window), true, None);
+        let region = MenuItem::new(
+            label(CaptureMode::Region.label_menu(), &hotkeys.region),
+            true,
+            None,
+        );
+        let window = MenuItem::new(
+            label(CaptureMode::Window.label_menu(), &hotkeys.window),
+            true,
+            None,
+        );
         let fullscreen = MenuItem::new(
             label(CaptureMode::FullScreen.label_menu(), &hotkeys.fullscreen),
             true,
             None,
         );
-        let watch = MenuItem::new(label(HotkeyAction::Watch.label(), &hotkeys.watch), true, None);
+        let watch = MenuItem::new(
+            label(HotkeyAction::Watch.label(), &hotkeys.watch),
+            true,
+            None,
+        );
         let settings = MenuItem::new(t("Settings"), true, None);
         let exit = MenuItem::new(t("Quit"), true, None);
 
@@ -712,11 +733,7 @@ mod win {
 
     fn notify_data(hwnd: HWND, icon: HICON) -> NOTIFYICONDATAW {
         let mut tip = [0u16; 128];
-        for (i, c) in "Sakura Screen Translator"
-            .encode_utf16()
-            .take(127)
-            .enumerate()
-        {
+        for (i, c) in "Screen Translator".encode_utf16().take(127).enumerate() {
             tip[i] = c;
         }
         NOTIFYICONDATAW {
@@ -907,10 +924,7 @@ mod win {
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
-        let exit: Vec<u16> = t("Quit")
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
+        let exit: Vec<u16> = t("Quit").encode_utf16().chain(std::iter::once(0)).collect();
 
         let _ = AppendMenuW(menu, MF_STRING, ID_REGION, PCWSTR(region.as_ptr()));
         let _ = AppendMenuW(menu, MF_STRING, ID_WINDOW, PCWSTR(window.as_ptr()));
@@ -1036,5 +1050,67 @@ mod win {
             }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
+    }
+}
+
+#[cfg(test)]
+mod icon_tests {
+    use super::*;
+    use crate::shared::mark::{
+        ON_CONTAINER_RGB, ON_PRIMARY_RGB, TILE_CONTAINER_RGB, TILE_PRIMARY_RGB,
+    };
+
+    fn pixel(icon: &egui::IconData, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * icon.width + x) * 4) as usize;
+        [
+            icon.rgba[i],
+            icon.rgba[i + 1],
+            icon.rgba[i + 2],
+            icon.rgba[i + 3],
+        ]
+    }
+
+    fn close_rgb(px: [u8; 4], rgb: [u8; 3], tol: u8) -> bool {
+        (0..3).all(|c| px[c].abs_diff(rgb[c]) <= tol)
+    }
+
+    #[test]
+    fn the_window_icon_is_the_translation_mark() {
+        let icon = app_icon(64);
+        assert_eq!((icon.width, icon.height), (64, 64));
+        assert_eq!(icon.rgba.len(), 64 * 64 * 4);
+        // Not the eframe default (a white e on an opaque black square).
+        assert_eq!(pixel(&icon, 0, 0)[3], 0, "corners must stay transparent");
+        assert_eq!(pixel(&icon, 63, 63)[3], 0);
+
+        let (left, right) = crate::shared::mark::overlap_geometry(64);
+        let lx = ((left.x0 + left.width() * 0.30) * 64.0).round() as u32;
+        let ly = ((left.y0 + left.height() * 0.12) * 64.0).round() as u32;
+        let rx = ((right.x0 + right.width() * 0.80) * 64.0).round() as u32;
+        let ry = ((right.y0 + right.height() * 0.12) * 64.0).round() as u32;
+        let lp = pixel(&icon, lx, ly);
+        let rp = pixel(&icon, rx, ry);
+        assert!(
+            close_rgb(lp, TILE_PRIMARY_RGB, 8),
+            "left tile should be primary blue, got {lp:?}"
+        );
+        assert!(
+            close_rgb(rp, TILE_CONTAINER_RGB, 8),
+            "right tile should be the container tint, got {rp:?}"
+        );
+
+        let has_a =
+            (0..64).any(|y| (0..64).any(|x| close_rgb(pixel(&icon, x, y), ON_PRIMARY_RGB, 30)));
+        let has_wen =
+            (0..64).any(|y| (0..64).any(|x| close_rgb(pixel(&icon, x, y), ON_CONTAINER_RGB, 30)));
+        assert!(has_a, "window icon is missing the Latin A");
+        assert!(has_wen, "window icon is missing the 文");
+    }
+
+    #[test]
+    fn the_window_icon_handle_is_not_the_eframe_placeholder() {
+        let icon = window_icon();
+        assert!(icon.width >= 32 && icon.height >= 32);
+        assert_ne!(*icon, egui::IconData::default());
     }
 }

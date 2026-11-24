@@ -1,20 +1,16 @@
-//! Sakura widget kit — frameless.
+//! Shared widget kit for the Material-inspired Screen Translator chrome.
 //!
-//! Nothing here draws an outline. A group is a fill a couple of tones off the
-//! page; a row inside it is separated by a divider at the edge of visibility; a
-//! control is a soft fill that reacts to the pointer. The one exception is a
-//! surface that floats over the desktop, where a hairline is the only thing
-//! keeping the panel distinct from whatever happens to be behind it.
-//!
-//! What stays platform-specific is identity, not chrome: the accent, the
-//! navigation marker, the switch, the window controls, how a shortcut is spelled.
+//! Surfaces are tonal fills with generous rounding. Selected chips, buttons,
+//! and navigation use a restrained accent and container tint. Outlines appear
+//! only where they mark state (an unselected chip, a floating overlay, a
+//! recording hotkey). Platform identity stays in typography metrics, captions,
+//! and how a shortcut is spelled — not in a second colour system.
 
-use egui::{
-    Align2, Color32, FontId, Painter, Pos2, Rect, Response, Rounding, Sense, Stroke, Ui, Vec2,
-};
+use egui::{Align2, Color32, Painter, Pos2, Rect, Response, Rounding, Sense, Stroke, Ui, Vec2};
 
-use super::platform::NavStyle;
+use super::platform::CaptionStyle;
 use super::theme::{text, wash, Theme};
+use crate::shared::i18n::t;
 
 pub type IconFn = fn(&Painter, Rect, Color32);
 
@@ -52,10 +48,10 @@ pub fn glass_frame(theme: &Theme) -> egui::Frame {
         .rounding(theme.surface_rounding())
         .stroke(Stroke::new(1.0_f32, theme.border))
         .shadow(egui::epaint::Shadow {
-            offset: egui::vec2(0.0, 16.0),
-            blur: 44.0,
+            offset: egui::vec2(0.0, 6.0),
+            blur: 24.0,
             spread: 0.0,
-            color: Color32::from_black_alpha(140),
+            color: Color32::from_black_alpha(110),
         })
         .inner_margin(egui::Margin::same(0.0))
 }
@@ -64,12 +60,12 @@ pub fn glass_frame(theme: &Theme) -> egui::Frame {
 pub fn section_caption(ui: &mut Ui, theme: &Theme, label: &str) {
     ui.add_space(16.0);
     ui.label(
-        egui::RichText::new(label.to_uppercase())
+        egui::RichText::new(label)
             .font(text::caption())
             .color(theme.text_dim)
             .strong(),
     );
-    ui.add_space(7.0);
+    ui.add_space(8.0);
 }
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
@@ -105,6 +101,7 @@ impl<'a> RowSpec<'a> {
         self
     }
 
+    #[allow(dead_code)]
     pub fn icon_tint(mut self, tint: Color32) -> Self {
         self.icon_tint = Some(tint);
         self
@@ -244,30 +241,49 @@ pub fn toggle(ui: &mut Ui, theme: &Theme, on: &mut bool) -> Response {
         if resp.hovered() {
             theme
                 .accent
-                .gamma_multiply(if theme.dark { 1.12 } else { 0.92 })
+                .gamma_multiply(if theme.dark { 1.08 } else { 0.92 })
         } else {
             theme.accent
         }
     } else if resp.hovered() {
         theme.control_fill_hover()
-    } else if theme.dark {
-        wash(255, 255, 255, 40)
     } else {
-        wash(0, 0, 0, 42)
+        Color32::TRANSPARENT
     };
     p.rect_filled(rect, rounding, track);
+    if !*on {
+        p.rect_stroke(
+            rect,
+            rounding,
+            Stroke::new(
+                2.0_f32,
+                if resp.hovered() {
+                    theme.text_dim
+                } else {
+                    theme.border
+                },
+            ),
+        );
+    }
 
-    let pad = 2.6;
+    let pad = 3.0;
     let r = h / 2.0 - pad;
     let x = egui::lerp((rect.min.x + pad + r)..=(rect.max.x - pad - r), how_on);
     let knob = if *on {
         theme.on_accent
-    } else if theme.metrics.toggle_dim_knob_when_off {
-        theme.text_dim
+    } else if theme.dark {
+        theme.text
     } else {
         Color32::WHITE
     };
     p.circle_filled(egui::pos2(x, rect.center().y), r, knob);
+    if !*on {
+        p.circle_stroke(
+            egui::pos2(x, rect.center().y),
+            r,
+            Stroke::new(1.0_f32, theme.border),
+        );
+    }
 
     resp
 }
@@ -304,14 +320,21 @@ fn button_impl(ui: &mut Ui, theme: &Theme, label: &str, kind: ButtonKind) -> Res
     let (fill, fg) = match kind {
         _ if !enabled => (theme.control_fill(), theme.text_dim),
         ButtonKind::Primary => (theme.accent, theme.on_accent),
-        ButtonKind::Secondary => (theme.control_fill(), theme.text),
+        ButtonKind::Secondary => (theme.primary_container, theme.on_primary_container),
         ButtonKind::Ghost => (Color32::TRANSPARENT, theme.accent),
     };
 
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_owned(), text::small(), fg);
-    let pad = Vec2::new(if kind == ButtonKind::Ghost { 8.0 } else { 13.0 }, 6.0);
+    let pad = Vec2::new(
+        if kind == ButtonKind::Ghost {
+            10.0
+        } else {
+            16.0
+        },
+        8.0,
+    );
     let (rect, resp) = ui.allocate_exact_size(galley.size() + pad * 2.0, Sense::click());
 
     let hot = resp.hovered() && enabled;
@@ -332,18 +355,18 @@ fn button_impl(ui: &mut Ui, theme: &Theme, label: &str, kind: ButtonKind) -> Res
             }
             ButtonKind::Secondary => {
                 if down {
-                    theme.control_fill_active()
+                    fill.gamma_multiply(if theme.dark { 1.16 } else { 0.92 })
                 } else if hot {
-                    theme.control_fill_hover()
+                    fill.gamma_multiply(if theme.dark { 1.08 } else { 0.96 })
                 } else {
                     fill
                 }
             }
             ButtonKind::Ghost => {
                 if down {
-                    theme.control_fill_active()
+                    theme.tint(theme.accent, 36)
                 } else if hot {
-                    theme.control_fill()
+                    theme.tint(theme.accent, 20)
                 } else {
                     Color32::TRANSPARENT
                 }
@@ -352,7 +375,8 @@ fn button_impl(ui: &mut Ui, theme: &Theme, label: &str, kind: ButtonKind) -> Res
     };
 
     if bg.a() > 0 {
-        p.rect_filled(rect, theme.control_rounding(), bg);
+        // Material buttons use a near-pill corner, larger than input fields.
+        p.rect_filled(rect, Rounding::same(20.0), bg);
     }
     // `text` rather than `galley`: the colour is stated at the point of drawing,
     // so a disabled `Ui` cannot leave a filled box with an invisible label.
@@ -376,10 +400,11 @@ pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: IconFn, size: f32, tip: &st
     let hot = resp.hovered();
 
     let p = ui.painter();
+    let icon_rounding = Rounding::same((size * 0.5).min(20.0));
     if resp.is_pointer_button_down_on() {
-        p.rect_filled(rect, theme.control_rounding(), theme.control_fill_active());
+        p.rect_filled(rect, icon_rounding, theme.tint(theme.accent, 36));
     } else if hot {
-        p.rect_filled(rect, theme.control_rounding(), theme.control_fill_hover());
+        p.rect_filled(rect, icon_rounding, theme.tint(theme.accent, 20));
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
 
@@ -394,19 +419,27 @@ pub fn icon_button(ui: &mut Ui, theme: &Theme, icon: IconFn, size: f32, tip: &st
 
 /// Language pill: `EN`.
 pub fn chip(ui: &mut Ui, theme: &Theme, label: &str, accent: bool) -> Response {
-    let fg = if accent { theme.on_accent } else { theme.text };
+    let fg = if accent {
+        theme.on_primary_container
+    } else {
+        theme.text
+    };
     let galley = ui
         .painter()
         .layout_no_wrap(label.to_owned(), text::caption(), fg);
-    let (rect, resp) = ui.allocate_exact_size(galley.size() + Vec2::new(14.0, 8.0), Sense::hover());
+    let (rect, resp) = ui.allocate_exact_size(galley.size() + Vec2::new(16.0, 8.0), Sense::hover());
 
     let bg = if accent {
-        theme.accent
+        theme.primary_container
     } else {
         theme.control_fill()
     };
     let p = ui.painter();
-    p.rect_filled(rect, theme.control_rounding(), bg);
+    let rounding = Rounding::same(rect.height() / 2.0);
+    p.rect_filled(rect, rounding, bg);
+    if !accent {
+        p.rect_stroke(rect, rounding, Stroke::new(1.0_f32, theme.border));
+    }
     p.galley(rect.center() - galley.size() / 2.0, galley, fg);
     resp
 }
@@ -487,8 +520,8 @@ fn dashed_rect(p: &Painter, rect: Rect, rounding: Rounding, stroke: Stroke) {
 /// The capture-mode control at the top of the overlay. Returns the index that
 /// was clicked.
 ///
-/// The selected segment is filled with the platform accent on Windows and with
-/// white on macOS, matching the two rounds of the design.
+/// The selected segment is a solid accent pill so it stays readable on the
+/// dark overlay chrome, on any desktop background.
 pub fn segmented(
     ui: &mut Ui,
     theme: &Theme,
@@ -496,17 +529,8 @@ pub fn segmented(
     selected: usize,
 ) -> Option<usize> {
     let mut clicked = None;
-    let use_accent = theme.metrics.nav_style == NavStyle::Indicator;
-    let selected_fill = if use_accent {
-        theme.accent
-    } else {
-        wash(255, 255, 255, 235)
-    };
-    let selected_fg = if use_accent {
-        theme.on_accent
-    } else {
-        Color32::from_rgb(0x1A, 0x1A, 0x1A)
-    };
+    let selected_fill = theme.accent;
+    let selected_fg = theme.on_accent;
 
     egui::Frame::none()
         .fill(OVERLAY_SURFACE)
@@ -529,15 +553,12 @@ pub fn segmented(
                     let size = Vec2::new(galley.size().x + icon_w + 28.0, 26.0);
                     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
 
+                    let seg_rounding = Rounding::same(rect.height() / 2.0);
                     if on {
-                        ui.painter()
-                            .rect_filled(rect, theme.control_rounding(), selected_fill);
+                        ui.painter().rect_filled(rect, seg_rounding, selected_fill);
                     } else if resp.hovered() {
-                        ui.painter().rect_filled(
-                            rect,
-                            theme.control_rounding(),
-                            wash(255, 255, 255, 28),
-                        );
+                        ui.painter()
+                            .rect_filled(rect, seg_rounding, wash(255, 255, 255, 28));
                     }
 
                     let icon_rect = Rect::from_min_size(
@@ -610,11 +631,8 @@ pub fn overlay_button(ui: &mut Ui, theme: &Theme, icon: IconFn, label: &str) -> 
     resp
 }
 
-/// Navigation entry in the settings window.
-///
-/// macOS fills the whole row with the accent and puts a coloured tile behind the
-/// icon. Windows 11 uses a faint neutral fill plus a short accent bar on the
-/// leading edge and leaves the icon untinted.
+/// Navigation entry in the settings window: a full-pill Material Design 3 item
+/// with a `primary_container` active indicator and tonal hover state layer.
 pub fn sidebar_item(
     ui: &mut Ui,
     theme: &Theme,
@@ -623,26 +641,16 @@ pub fn sidebar_item(
     label: &str,
     selected: bool,
 ) -> Response {
-    let indicator = theme.metrics.nav_style == NavStyle::Indicator;
-    let h = if indicator { 34.0 } else { 30.0 };
+    let h = 36.0;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::click());
 
     let p = ui.painter();
-    let rounding = theme.control_rounding();
+    let rounding = Rounding::same(rect.height() / 2.0);
 
-    if indicator {
-        if selected {
-            p.rect_filled(rect, rounding, theme.tint(theme.text, 16));
-            let bar = Rect::from_min_size(
-                egui::pos2(rect.min.x, rect.center().y - 8.0),
-                Vec2::new(3.0, 16.0),
-            );
-            p.rect_filled(bar, Rounding::same(2.0), theme.accent);
-        } else if resp.hovered() {
-            p.rect_filled(rect, rounding, theme.hover_fill());
-        }
-    } else if selected {
-        p.rect_filled(rect, rounding, theme.accent);
+    if selected {
+        p.rect_filled(rect, rounding, theme.primary_container);
+    } else if resp.is_pointer_button_down_on() {
+        p.rect_filled(rect, rounding, theme.tint(theme.accent, 28));
     } else if resp.hovered() {
         p.rect_filled(rect, rounding, theme.hover_fill());
     }
@@ -652,41 +660,26 @@ pub fn sidebar_item(
 
     let icon_size = 18.0;
     let icon_rect = Rect::from_min_size(
-        egui::pos2(rect.min.x + 10.0, rect.center().y - icon_size / 2.0),
+        egui::pos2(rect.min.x + 14.0, rect.center().y - icon_size / 2.0),
         Vec2::splat(icon_size),
     );
 
-    let fg = if selected && !indicator {
-        theme.on_accent
+    let fg = if selected {
+        theme.on_primary_container
     } else {
         theme.text
     };
-
-    if indicator {
-        icon(
-            p,
-            icon_rect,
-            if selected {
-                theme.accent
-            } else {
-                theme.text_dim
-            },
-        );
+    let icon_color = if selected {
+        theme.on_primary_container
+    } else if tile == Color32::TRANSPARENT {
+        theme.text_dim
     } else {
-        p.rect_filled(
-            icon_rect,
-            Rounding::same(5.0),
-            if selected {
-                wash(255, 255, 255, 64)
-            } else {
-                tile
-            },
-        );
-        icon(p, icon_rect.shrink(3.5), Color32::WHITE);
-    }
+        tile
+    };
+    icon(p, icon_rect, icon_color);
 
     p.text(
-        egui::pos2(icon_rect.max.x + 9.0, rect.center().y),
+        egui::pos2(icon_rect.max.x + 10.0, rect.center().y),
         Align2::LEFT_CENTER,
         label,
         text::body(),
@@ -698,15 +691,15 @@ pub fn sidebar_item(
 
 /// Search field above the navigation. Returns true when the text changed.
 pub fn search_field(ui: &mut Ui, theme: &Theme, query: &mut String) -> bool {
-    let h = 30.0;
+    let h = 36.0;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::hover());
-    let fill = if resp.hovered() {
-        theme.control_fill_hover()
-    } else {
-        theme.control_fill()
-    };
-    ui.painter()
-        .rect_filled(rect, theme.control_rounding(), fill);
+    let fill = theme.field_fill();
+    let rounding = Rounding::same(h / 2.0);
+    ui.painter().rect_filled(rect, rounding, fill);
+    if resp.hovered() {
+        ui.painter()
+            .rect_stroke(rect, rounding, Stroke::new(1.0_f32, theme.accent));
+    }
 
     let icon_rect = Rect::from_min_size(
         egui::pos2(rect.min.x + 8.0, rect.center().y - 7.0),
@@ -791,7 +784,7 @@ pub fn select_card(ui: &mut Ui, theme: &Theme, card: SelectCard<'_>) -> Response
     let rounding = theme.group_rounding();
 
     let fill = if card.selected {
-        theme.tint(theme.accent, if theme.dark { 46 } else { 26 })
+        theme.primary_container
     } else if resp.is_pointer_button_down_on() {
         theme.control_fill_active()
     } else if resp.hovered() {
@@ -802,18 +795,11 @@ pub fn select_card(ui: &mut Ui, theme: &Theme, card: SelectCard<'_>) -> Response
     p.rect_filled(rect, rounding, fill);
 
     if card.selected {
-        // The wash alone is a quiet difference; the outline is what makes the
-        // chosen card the first thing seen.
         p.rect_stroke(
             rect.shrink(0.5),
             rounding,
-            Stroke::new(1.0_f32, theme.tint(theme.accent, if theme.dark { 120 } else { 150 })),
+            Stroke::new(1.5_f32, theme.accent),
         );
-        let bar = Rect::from_min_size(
-            egui::pos2(rect.min.x, rect.center().y - 11.0),
-            Vec2::new(3.0, 22.0),
-        );
-        p.rect_filled(bar, Rounding::same(2.0), theme.accent);
     }
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -824,8 +810,12 @@ pub fn select_card(ui: &mut Ui, theme: &Theme, card: SelectCard<'_>) -> Response
         egui::pos2(left, rect.center().y - 9.0),
         Align2::LEFT_CENTER,
         card.title,
-        FontId::proportional(12.5),
-        theme.text,
+        text::body(),
+        if card.selected {
+            theme.on_primary_container
+        } else {
+            theme.text
+        },
     );
     let subtitle = p.text(
         egui::pos2(left, rect.center().y + 9.0),
@@ -871,11 +861,397 @@ pub fn hint_pill(ui: &mut Ui, theme: &Theme, label: &str) {
     let size = galley.size() + Vec2::new(26.0, 10.0);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let _ = theme;
-    ui.painter().rect_filled(
-        rect,
-        Rounding::same(14.0),
-        wash(0, 0, 0, 115),
-    );
+    ui.painter()
+        .rect_filled(rect, Rounding::same(14.0), wash(0, 0, 0, 115));
     ui.painter()
         .galley(rect.center() - galley.size() / 2.0, galley, fg);
+}
+
+// ── Material Design 3 window top bar & borderless resize ─────────────────────
+
+/// Height of the Material Design 3 window top bar.
+pub const TITLEBAR_HEIGHT: f32 = 44.0;
+
+/// Window actions requested by [`settings_titlebar`].
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TitleBarAction {
+    pub start_drag: bool,
+    pub minimize: bool,
+    pub toggle_maximize: bool,
+    pub close: bool,
+}
+
+/// Edge and corner resize handles for a borderless resizable viewport.
+///
+/// Returns `true` if a resize started this frame so the title bar drag region
+/// does not also fire `StartDrag`.
+pub fn handle_window_resize(ctx: &egui::Context, maximized: bool) -> bool {
+    if maximized || ctx.dragged_id().is_some() {
+        return false;
+    }
+    let rect = ctx.screen_rect();
+    let Some(pos) = ctx.input(|i| i.pointer.hover_pos()) else {
+        return false;
+    };
+    let Some(dir) = resize_direction(pos, rect) else {
+        return false;
+    };
+
+    let cursor = match dir {
+        egui::ResizeDirection::North | egui::ResizeDirection::South => {
+            egui::CursorIcon::ResizeVertical
+        }
+        egui::ResizeDirection::East | egui::ResizeDirection::West => {
+            egui::CursorIcon::ResizeHorizontal
+        }
+        egui::ResizeDirection::NorthWest | egui::ResizeDirection::SouthEast => {
+            egui::CursorIcon::ResizeNwSe
+        }
+        egui::ResizeDirection::NorthEast | egui::ResizeDirection::SouthWest => {
+            egui::CursorIcon::ResizeNeSw
+        }
+    };
+    ctx.set_cursor_icon(cursor);
+
+    if ctx.input(|i| i.pointer.primary_pressed()) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::BeginResize(dir));
+        return true;
+    }
+    false
+}
+
+fn resize_direction(pos: Pos2, rect: Rect) -> Option<egui::ResizeDirection> {
+    const EDGE: f32 = 5.0;
+    const CORNER: f32 = 12.0;
+
+    let on_left = pos.x <= rect.min.x + EDGE;
+    let on_right = pos.x >= rect.max.x - EDGE;
+    let on_top = pos.y <= rect.min.y + EDGE;
+    let on_bottom = pos.y >= rect.max.y - EDGE;
+
+    if !(on_left || on_right || on_top || on_bottom) {
+        return None;
+    }
+
+    let near_left = pos.x <= rect.min.x + CORNER;
+    let near_right = pos.x >= rect.max.x - CORNER;
+    let near_top = pos.y <= rect.min.y + CORNER;
+    let near_bottom = pos.y >= rect.max.y - CORNER;
+
+    use egui::ResizeDirection;
+    match (near_left, near_right, near_top, near_bottom) {
+        (true, _, true, _) => Some(ResizeDirection::NorthWest),
+        (_, true, true, _) => Some(ResizeDirection::NorthEast),
+        (true, _, _, true) => Some(ResizeDirection::SouthWest),
+        (_, true, _, true) => Some(ResizeDirection::SouthEast),
+        _ if on_top => Some(ResizeDirection::North),
+        _ if on_bottom => Some(ResizeDirection::South),
+        _ if on_left => Some(ResizeDirection::West),
+        _ if on_right => Some(ResizeDirection::East),
+        _ => None,
+    }
+}
+
+/// Material Design 3 top bar for the settings window.
+///
+/// Shares the `theme.chrome` tonal surface with the navigation pane below and
+/// replaces native sharp caption chrome with circular Material icon buttons
+/// (or macOS traffic lights when `CaptionStyle::TrafficLights` is active).
+pub fn settings_titlebar(
+    ui: &mut Ui,
+    theme: &Theme,
+    title: &str,
+    subtitle: &str,
+    maximized: bool,
+    resizing: bool,
+) -> TitleBarAction {
+    let mut action = TitleBarAction::default();
+    let (bar, _) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width(), TITLEBAR_HEIGHT),
+        Sense::hover(),
+    );
+
+    let edge = if maximized { 0.0 } else { 5.0 };
+    let drag_rect = if theme.metrics.caption == CaptionStyle::TrafficLights {
+        let lights = super::icons::traffic_lights(
+            ui.painter(),
+            egui::pos2(bar.min.x + 16.0, bar.center().y - 5.5),
+            5.5,
+            7.0,
+            true,
+        );
+        let step = 11.0 + 7.0;
+        let close_r = Rect::from_min_size(lights.min, Vec2::splat(11.0));
+        let min_r = Rect::from_min_size(lights.min + Vec2::new(step, 0.0), Vec2::splat(11.0));
+        let max_r = Rect::from_min_size(lights.min + Vec2::new(step * 2.0, 0.0), Vec2::splat(11.0));
+
+        if ui
+            .interact(close_r, egui::Id::new("st_mac_close"), Sense::click())
+            .on_hover_text(t("Close · Esc"))
+            .clicked()
+        {
+            action.close = true;
+        }
+        if ui
+            .interact(min_r, egui::Id::new("st_mac_min"), Sense::click())
+            .on_hover_text(t("Minimize"))
+            .clicked()
+        {
+            action.minimize = true;
+        }
+        if ui
+            .interact(max_r, egui::Id::new("st_mac_max"), Sense::click())
+            .on_hover_text(if maximized {
+                t("Restore")
+            } else {
+                t("Maximize")
+            })
+            .clicked()
+        {
+            action.toggle_maximize = true;
+        }
+
+        paint_title_lockup(ui.painter(), bar, theme, title, subtitle, true);
+        Rect::from_min_max(
+            egui::pos2((lights.max.x + 10.0).min(bar.max.x), bar.min.y + edge),
+            egui::pos2((bar.max.x - edge).max(bar.min.x), bar.max.y),
+        )
+    } else {
+        let btn = 30.0;
+        let gap = 6.0;
+        let right_pad = 10.0;
+        let btn_y = bar.center().y - btn / 2.0;
+
+        let close_rect =
+            Rect::from_min_size(egui::pos2(bar.max.x - right_pad - btn, btn_y), Vec2::splat(btn));
+        let max_rect =
+            Rect::from_min_size(egui::pos2(close_rect.min.x - gap - btn, btn_y), Vec2::splat(btn));
+        let min_rect =
+            Rect::from_min_size(egui::pos2(max_rect.min.x - gap - btn, btn_y), Vec2::splat(btn));
+
+        if m3_caption_button(
+            ui,
+            theme,
+            min_rect,
+            "st_win_min",
+            super::icons::minimize,
+            t("Minimize"),
+            false,
+        )
+        .clicked()
+        {
+            action.minimize = true;
+        }
+        if m3_caption_button(
+            ui,
+            theme,
+            max_rect,
+            "st_win_max",
+            if maximized {
+                super::icons::restore
+            } else {
+                super::icons::maximize
+            },
+            if maximized {
+                t("Restore")
+            } else {
+                t("Maximize")
+            },
+            false,
+        )
+        .clicked()
+        {
+            action.toggle_maximize = true;
+        }
+        if m3_caption_button(
+            ui,
+            theme,
+            close_rect,
+            "st_win_close",
+            super::icons::close,
+            t("Close · Esc"),
+            true,
+        )
+        .clicked()
+        {
+            action.close = true;
+        }
+
+        paint_title_lockup(ui.painter(), bar, theme, title, subtitle, false);
+        Rect::from_min_max(
+            egui::pos2(bar.min.x + edge, bar.min.y + edge),
+            egui::pos2((min_rect.min.x - 6.0).max(bar.min.x + edge), bar.max.y),
+        )
+    };
+
+    if drag_rect.width() > 0.0 && drag_rect.height() > 0.0 {
+        let drag_resp = ui.interact(
+            drag_rect,
+            egui::Id::new("st_titlebar_drag"),
+            Sense::click_and_drag(),
+        );
+        if !resizing {
+            if drag_resp.double_clicked() {
+                action.toggle_maximize = true;
+            } else if drag_resp.drag_started_by(egui::PointerButton::Primary) {
+                action.start_drag = true;
+            }
+        }
+    }
+
+    action
+}
+
+fn paint_title_lockup(
+    p: &Painter,
+    bar: Rect,
+    theme: &Theme,
+    title: &str,
+    subtitle: &str,
+    centered: bool,
+) {
+    let icon_size = 18.0;
+    let icon_gap = 10.0;
+
+    let title_g = p.layout_no_wrap(title.to_owned(), text::body_strong(), theme.text);
+    let sep_g = if subtitle.is_empty() {
+        None
+    } else {
+        Some(p.layout_no_wrap("  ·  ".to_owned(), text::small(), theme.text_faint))
+    };
+    let sub_g = if subtitle.is_empty() {
+        None
+    } else {
+        Some(p.layout_no_wrap(subtitle.to_owned(), text::small(), theme.text_dim))
+    };
+
+    let total_w = icon_size
+        + icon_gap
+        + title_g.size().x
+        + sep_g.as_ref().map_or(0.0, |g| g.size().x)
+        + sub_g.as_ref().map_or(0.0, |g| g.size().x);
+
+    // On Windows/Linux, align the brand mark at x = 22.0 so it shares the exact
+    // vertical axis of every icon in the navigation drawer (8 px margin + 14 px
+    // item inset) and the title text lines up with every navigation label.
+    let mut x = if centered {
+        bar.center().x - total_w / 2.0
+    } else {
+        bar.min.x + 22.0
+    };
+
+    let icon_rect = Rect::from_min_size(
+        egui::pos2(x, bar.center().y - icon_size / 2.0),
+        Vec2::splat(icon_size),
+    );
+    super::icons::mark(p, icon_rect, theme.sakura);
+    x = icon_rect.max.x + icon_gap;
+
+    let title_y = bar.center().y - title_g.size().y / 2.0;
+    let title_w = title_g.size().x;
+    p.galley(egui::pos2(x, title_y), title_g, theme.text);
+    x += title_w;
+
+    if let (Some(sep), Some(sub)) = (sep_g, sub_g) {
+        let sep_y = bar.center().y - sep.size().y / 2.0;
+        let sep_w = sep.size().x;
+        p.galley(egui::pos2(x, sep_y), sep, theme.text_faint);
+        x += sep_w;
+
+        let sub_y = bar.center().y - sub.size().y / 2.0;
+        p.galley(egui::pos2(x, sub_y), sub, theme.text_dim);
+    }
+}
+
+fn m3_caption_button(
+    ui: &mut Ui,
+    theme: &Theme,
+    rect: Rect,
+    id: &str,
+    icon: IconFn,
+    tip: &str,
+    destructive: bool,
+) -> Response {
+    let resp = ui.interact(rect, egui::Id::new(id), Sense::click());
+    let hot = resp.hovered();
+    let down = resp.is_pointer_button_down_on();
+    let p = ui.painter();
+    let rounding = Rounding::same(rect.height() / 2.0);
+
+    let (fill, fg) = if destructive {
+        if down {
+            (
+                if theme.dark {
+                    Color32::from_rgb(0xBA, 0x1A, 0x1A)
+                } else {
+                    theme.danger
+                },
+                Color32::WHITE,
+            )
+        } else if hot {
+            (theme.error_container, theme.on_error_container)
+        } else {
+            (Color32::TRANSPARENT, theme.text_dim)
+        }
+    } else if down {
+        (theme.control_fill_active(), theme.text)
+    } else if hot {
+        (theme.hover_fill(), theme.text)
+    } else {
+        (Color32::TRANSPARENT, theme.text_dim)
+    };
+
+    if fill.a() > 0 {
+        p.rect_filled(rect, rounding, fill);
+    }
+    icon(p, rect.shrink(6.0), fg);
+    if hot {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    resp.on_hover_text(tip)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn borderless_resize_detects_edges_corners_and_ignores_interior() {
+        let r = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(820.0, 680.0));
+        assert_eq!(
+            resize_direction(Pos2::new(2.0, 2.0), r),
+            Some(egui::ResizeDirection::NorthWest)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(818.0, 3.0), r),
+            Some(egui::ResizeDirection::NorthEast)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(3.0, 678.0), r),
+            Some(egui::ResizeDirection::SouthWest)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(818.0, 678.0), r),
+            Some(egui::ResizeDirection::SouthEast)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(400.0, 2.0), r),
+            Some(egui::ResizeDirection::North)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(400.0, 678.0), r),
+            Some(egui::ResizeDirection::South)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(2.0, 300.0), r),
+            Some(egui::ResizeDirection::West)
+        );
+        assert_eq!(
+            resize_direction(Pos2::new(818.0, 300.0), r),
+            Some(egui::ResizeDirection::East)
+        );
+        // Interior and caption button centers must never trigger a resize.
+        assert_eq!(resize_direction(Pos2::new(400.0, 300.0), r), None);
+        assert_eq!(resize_direction(Pos2::new(795.0, 22.0), r), None);
+    }
 }

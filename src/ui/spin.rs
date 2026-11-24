@@ -1,9 +1,9 @@
 //! The working animation for the brand mark.
 //!
-//! While a translation is in flight the sakura turns and breathes. When the work
-//! ends it does not snap back: it coasts on to the next fifth of a turn, where
-//! the mark's five-fold symmetry makes it identical to rest, and the breath
-//! eases out along the way. The eye sees a spin coming to a stop rather than a
+//! While a translation is in flight the mark breathes and a progress arc
+//! travels around it. When the work ends it does not snap back: it coasts on
+//! to the next symmetry step, the monogram stays upright, and the breath eases
+//! out along the way. The eye sees a motion coming to a stop rather than a
 //! frame that changed.
 //!
 //! Kept here, away from any toolkit, because both the settings window and the
@@ -134,7 +134,7 @@ mod tests {
         assert!(s.is_at_rest());
         assert_eq!(s.scale(), 1.0, "the breath did not ease out");
 
-        // A multiple of a fifth of a turn looks exactly like zero.
+        // A multiple of the symmetry step is the landing the spinner aims for.
         let remainder = (s.turns() / SYMMETRY_TURN).fract();
         assert!(
             !(1e-3..=1.0 - 1e-3).contains(&remainder),

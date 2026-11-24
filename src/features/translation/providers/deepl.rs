@@ -76,8 +76,7 @@ pub async fn translate(req: &TranslateRequest, key: &Secret) -> Result<String, A
     }
     let target = target_code(req.target).ok_or_else(|| {
         AppError::Other(
-            t("DeepL does not support {language}")
-                .replace("{language}", &req.target.to_string()),
+            t("DeepL does not support {language}").replace("{language}", &req.target.to_string()),
         )
     })?;
 

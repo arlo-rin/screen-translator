@@ -15,7 +15,7 @@ use crate::ui::{icons, widgets, Theme};
 /// Title of the overlay's window. Never drawn — the window has no chrome — but
 /// it is how the platform layer picks this window out to place it over the
 /// whole desktop, the menu bar and the Dock included.
-pub const TITLE: &str = "Sakura capture overlay";
+pub const TITLE: &str = "Screen Translator capture";
 
 /// Converts between egui's local points and desktop physical pixels.
 ///
@@ -227,8 +227,7 @@ pub fn render(ctx: &egui::Context, theme: &Theme, state: &mut OverlayState) {
             // which is not necessarily the scale of the host window the
             // geometry was first built from, on a desktop with mixed scaling.
             if cfg!(windows) && screen.width() > 1.0 {
-                state.geometry.points_per_pixel =
-                    state.geometry.desktop.w as f32 / screen.width();
+                state.geometry.points_per_pixel = state.geometry.desktop.w as f32 / screen.width();
             }
 
             let response = ui.allocate_rect(screen, Sense::click_and_drag());
@@ -315,7 +314,9 @@ fn handle_region_drag(
                 .clamp_to(state.geometry.desktop);
             match bounds {
                 // Ignore a stray click that produced a few-pixel rectangle.
-                Some(b) if b.w >= super::screenshot::MIN_SIDE && b.h >= super::screenshot::MIN_SIDE => {
+                Some(b)
+                    if b.w >= super::screenshot::MIN_SIDE && b.h >= super::screenshot::MIN_SIDE =>
+                {
                     state.completed = Some(b);
                 }
                 _ => state.clear_selection(),
@@ -430,7 +431,11 @@ fn paint(ui: &mut egui::Ui, theme: &Theme, state: &OverlayState, screen: Rect, o
         0.0,
         Stroke::new(1.0_f32, Color32::from_black_alpha(110)),
     );
-    painter.rect_stroke(sel, 0.0, Stroke::new(1.0_f32, Color32::from_white_alpha(235)));
+    painter.rect_stroke(
+        sel,
+        0.0,
+        Stroke::new(1.0_f32, Color32::from_white_alpha(235)),
+    );
 
     if state.mode == CaptureMode::Region {
         paint_corners(painter, sel, theme.sakura_soft);
@@ -671,7 +676,10 @@ fn pointer_screen(ctx: &egui::Context, state: &OverlayState) -> Rect {
         return whole;
     };
     let monitor = monitor_for(Bounds { x, y, w: 1, h: 1 }).bounds;
-    let rect = state.geometry.bounds_to_rect(monitor, origin).intersect(whole);
+    let rect = state
+        .geometry
+        .bounds_to_rect(monitor, origin)
+        .intersect(whole);
     if rect.width() > 200.0 && rect.height() > 120.0 {
         rect
     } else {
@@ -717,7 +725,10 @@ mod readout_tests {
             Pos2::new(0.0, 1080.0),
         ] {
             let r = readout_rect(p, SIZE, SCREEN);
-            assert!(SCREEN.contains_rect(r), "escaped the screen at {p:?}: {r:?}");
+            assert!(
+                SCREEN.contains_rect(r),
+                "escaped the screen at {p:?}: {r:?}"
+            );
         }
     }
 

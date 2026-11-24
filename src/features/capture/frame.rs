@@ -25,7 +25,9 @@ pub struct Frame {
 
 impl std::fmt::Debug for Frame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Frame").field("bounds", &self.bounds).finish()
+        f.debug_struct("Frame")
+            .field("bounds", &self.bounds)
+            .finish()
     }
 }
 
@@ -51,7 +53,11 @@ impl Rgb {
     /// Half way between two colours.
     fn mean(self, other: Rgb) -> Rgb {
         let half = |a: u8, b: u8| ((a as u16 + b as u16) / 2) as u8;
-        Rgb(half(self.0, other.0), half(self.1, other.1), half(self.2, other.2))
+        Rgb(
+            half(self.0, other.0),
+            half(self.1, other.1),
+            half(self.2, other.2),
+        )
     }
 
     /// WCAG contrast ratio against another colour, 1–21.
@@ -272,9 +278,8 @@ impl Frame {
         let towards_start = |side: &[Rgb], known: [Rgb; 2]| {
             followed(side[..side.len().div_ceil(2)].iter().rev().copied(), known)
         };
-        let towards_end = |side: &[Rgb], known: [Rgb; 2]| {
-            followed(side[side.len() / 2..].iter().copied(), known)
-        };
+        let towards_end =
+            |side: &[Rgb], known: [Rgb; 2]| followed(side[side.len() / 2..].iter().copied(), known);
         let mut corners = typical;
         for (i, corner) in corners.iter_mut().enumerate() {
             let known = [typical[i], background];
@@ -396,29 +401,30 @@ impl Frame {
         // Walks away from the rectangle one line of probes at a time and
         // returns how many lines were clear. A line is clear when all but one
         // of its probes continue the surface — one speck is not an edge.
-        let walk = |start: i32, end: i32, step: i32, pixel: &dyn Fn(i32, i32) -> Rgb, along: &[i32]| {
-            let mut previous: Vec<Rgb> = along.iter().map(|a| pixel(start, *a)).collect();
-            let mut clear = 0;
-            let mut at = start + step;
-            while at != end + step {
-                let mut steps = 0;
-                let mut line = Vec::with_capacity(along.len());
-                for (probe, before) in along.iter().zip(&previous) {
-                    let c = pixel(at, *probe);
-                    if c.distance(*before) > STEP {
-                        steps += 1;
+        let walk =
+            |start: i32, end: i32, step: i32, pixel: &dyn Fn(i32, i32) -> Rgb, along: &[i32]| {
+                let mut previous: Vec<Rgb> = along.iter().map(|a| pixel(start, *a)).collect();
+                let mut clear = 0;
+                let mut at = start + step;
+                while at != end + step {
+                    let mut steps = 0;
+                    let mut line = Vec::with_capacity(along.len());
+                    for (probe, before) in along.iter().zip(&previous) {
+                        let c = pixel(at, *probe);
+                        if c.distance(*before) > STEP {
+                            steps += 1;
+                        }
+                        line.push(c);
                     }
-                    line.push(c);
+                    if steps > 1 {
+                        break;
+                    }
+                    previous = line;
+                    clear += 1;
+                    at += step;
                 }
-                if steps > 1 {
-                    break;
-                }
-                previous = line;
-                clear += 1;
-                at += step;
-            }
-            clear as f32
-        };
+                clear as f32
+            };
 
         let rows = probes(y0, y1, 5);
         let columns = probes(x0, x1, 9);
@@ -915,7 +921,11 @@ impl Frame {
             let fill = |i: usize| {
                 let t = i as f32 / (width - 1).max(1) as f32;
                 let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * t).round() as u8;
-                Rgb(mix(left.0, right.0), mix(left.1, right.1), mix(left.2, right.2))
+                Rgb(
+                    mix(left.0, right.0),
+                    mix(left.1, right.1),
+                    mix(left.2, right.2),
+                )
             };
             let there = |i: usize| self.pixel(x0 as usize + i, y0 as usize + index);
 
@@ -1643,7 +1653,12 @@ mod tests {
         paint(&mut rgba, w, 60, 30, 120, 20, Rgb(255, 255, 255));
         let f = frame(w, h, rgba);
         let colours = TextColours::flat(Rgb(90, 60, 88), Rgb(255, 255, 255));
-        let over = f.overhang([60.0, 30.0, 120.0, 20.0], &colours, [57.0, 27.0, 126.0, 26.0], 12.0);
+        let over = f.overhang(
+            [60.0, 30.0, 120.0, 20.0],
+            &colours,
+            [57.0, 27.0, 126.0, 26.0],
+            12.0,
+        );
         assert_eq!(over, [3.0, 3.0, 3.0, 3.0]);
     }
 
@@ -1731,7 +1746,12 @@ mod tests {
         paint(&mut rgba, w, 60, 30, 120, 20, Rgb(255, 255, 255));
         let f = frame(w, h, rgba);
         let colours = TextColours::flat(Rgb(90, 60, 88), Rgb(255, 255, 255));
-        let over = f.overhang([60.0, 30.0, 120.0, 20.0], &colours, [57.0, 27.0, 126.0, 26.0], 12.0);
+        let over = f.overhang(
+            [60.0, 30.0, 120.0, 20.0],
+            &colours,
+            [57.0, 27.0, 126.0, 26.0],
+            12.0,
+        );
         assert_eq!(over[2], 0.0, "{over:?}");
         // The other sides have surface all round and nothing sticking out.
         assert_eq!([over[0], over[1], over[3]], [0.0, 0.0, 0.0]);
@@ -1742,7 +1762,11 @@ mod tests {
         let f = lit_button();
         let colours = f.text_colours(60.0, 20.0, 120.0, 20.0);
         let healed = f
-            .healed([56.0, 16.0, 128.0, 28.0], &colours, [57.0, 17.0, 126.0, 26.0])
+            .healed(
+                [56.0, 16.0, 128.0, 28.0],
+                &colours,
+                [57.0, 17.0, 126.0, 26.0],
+            )
             .expect("a clean surface either side");
         assert_eq!(healed.size, [128, 28]);
         for (row, y) in (16..44).enumerate() {
@@ -1765,7 +1789,11 @@ mod tests {
         let f = frame(w, h, rgba);
         let colours = f.text_colours(60.0, 20.0, 120.0, 20.0);
         let healed = f
-            .healed([56.0, 16.0, 128.0, 28.0], &colours, [57.0, 17.0, 126.0, 26.0])
+            .healed(
+                [56.0, 16.0, 128.0, 28.0],
+                &colours,
+                [57.0, 17.0, 126.0, 26.0],
+            )
             .expect("most rows are clean");
         // Row 10 is y = 26, where the other word is. It must not have been
         // smeared across the plate.
@@ -1790,7 +1818,11 @@ mod tests {
         let f = frame(w, h, rgba);
         let colours = TextColours::flat(button, Rgb(255, 255, 255));
         let healed = f
-            .healed([44.0, 16.0, 120.0, 28.0], &colours, [67.0, 19.0, 86.0, 22.0])
+            .healed(
+                [44.0, 16.0, 120.0, 28.0],
+                &colours,
+                [67.0, 19.0, 86.0, 22.0],
+            )
             .expect("surface on the right of every row");
 
         let at = |x: i32, y: i32| healed.pixels[((y - 16) * 120 + (x - 44)) as usize];
@@ -1814,11 +1846,26 @@ mod tests {
         let f = frame(w, h, rgba);
         let colours = TextColours::flat(Rgb(90, 60, 88), Rgb(255, 255, 255));
         let healed = f
-            .healed([60.0, 12.0, 100.0, 36.0], &colours, [67.0, 21.0, 86.0, 18.0])
+            .healed(
+                [60.0, 12.0, 100.0, 36.0],
+                &colours,
+                [67.0, 21.0, 86.0, 18.0],
+            )
             .expect("the button's rows have surface beside them");
-        assert_eq!(healed.pixels[2 * 100 + 50], egui::Color32::TRANSPARENT, "above the button");
-        assert_eq!(healed.pixels[33 * 100 + 50], egui::Color32::TRANSPARENT, "below the button");
-        assert_eq!(healed.pixels[18 * 100 + 50], egui::Color32::from_rgb(90, 60, 88));
+        assert_eq!(
+            healed.pixels[2 * 100 + 50],
+            egui::Color32::TRANSPARENT,
+            "above the button"
+        );
+        assert_eq!(
+            healed.pixels[33 * 100 + 50],
+            egui::Color32::TRANSPARENT,
+            "below the button"
+        );
+        assert_eq!(
+            healed.pixels[18 * 100 + 50],
+            egui::Color32::from_rgb(90, 60, 88)
+        );
     }
 
     #[test]
@@ -1834,7 +1881,11 @@ mod tests {
         let f = frame(w, h, rgba);
         let colours = TextColours::flat(surface, Rgb(255, 255, 255));
         let healed = f
-            .healed([50.0, 16.0, 131.0, 28.0], &colours, [57.0, 21.0, 127.0, 18.0])
+            .healed(
+                [50.0, 16.0, 131.0, 28.0],
+                &colours,
+                [57.0, 21.0, 127.0, 18.0],
+            )
             .expect("surface on both sides");
 
         // Every row of the lettering is gone, the noisy ones included, all
@@ -1863,7 +1914,11 @@ mod tests {
         let f = frame(w, h, rgba);
         let colours = TextColours::flat(fill, Rgb(255, 255, 255));
         let healed = f
-            .healed([60.0, 12.0, 100.0, 36.0], &colours, [67.0, 21.0, 86.0, 18.0])
+            .healed(
+                [60.0, 12.0, 100.0, 36.0],
+                &colours,
+                [67.0, 21.0, 86.0, 18.0],
+            )
             .expect("the button's rows have surface beside them");
         let at = |row: i32| healed.pixels[((row - 12) * 100 + 50) as usize];
         assert_eq!(at(19), egui::Color32::TRANSPARENT, "the hairline above");
@@ -1878,13 +1933,22 @@ mod tests {
         let f = frame(300, 120, scenery(300, 120));
         let colours = f.text_colours(50.0, 40.0, 200.0, 26.0);
         assert!(f
-            .healed([46.0, 36.0, 208.0, 34.0], &colours, [47.0, 37.0, 206.0, 32.0])
+            .healed(
+                [46.0, 36.0, 208.0, 34.0],
+                &colours,
+                [47.0, 37.0, 206.0, 32.0]
+            )
             .is_none());
     }
 
     #[test]
     fn a_surface_is_carried_on_past_its_corners_but_not_for_ever() {
-        let corners = [Rgb(100, 100, 100), Rgb(200, 200, 200), Rgb(100, 100, 100), Rgb(200, 200, 200)];
+        let corners = [
+            Rgb(100, 100, 100),
+            Rgb(200, 200, 200),
+            Rgb(100, 100, 100),
+            Rgb(200, 200, 200),
+        ];
         assert_eq!(blend(corners, 0.5, 0.5), Rgb(150, 150, 150));
         assert_eq!(blend(corners, -0.5, 0.0), Rgb(50, 50, 50));
         assert_eq!(blend(corners, 9.0, 0.0), blend(corners, 2.0, 0.0));
@@ -2000,8 +2064,14 @@ mod tests {
     fn a_print_of_nothing_is_empty_and_does_not_panic() {
         let f = frame(200, 60, solid(200, 60, PAGE));
         let colours = TextColours::flat(PAGE, INK);
-        assert_eq!(f.ink_print(500.0, 500.0, 40.0, 20.0, &colours), InkPrint::default());
-        assert_eq!(f.ink_print(10.0, 10.0, 0.0, 0.0, &colours), InkPrint::default());
+        assert_eq!(
+            f.ink_print(500.0, 500.0, 40.0, 20.0, &colours),
+            InkPrint::default()
+        );
+        assert_eq!(
+            f.ink_print(10.0, 10.0, 0.0, 0.0, &colours),
+            InkPrint::default()
+        );
     }
 
     #[test]
@@ -2069,7 +2139,10 @@ mod tests {
         let after = frame(320, 80, rgba);
 
         let changed = before.signature().cells_changed(&after.signature());
-        assert!(changed > 150, "a line of text only registered in {changed} cells of 512");
+        assert!(
+            changed > 150,
+            "a line of text only registered in {changed} cells of 512"
+        );
     }
 
     #[test]
@@ -2087,7 +2160,15 @@ mod tests {
         let before = frame(w, h, solid(w, h, Rgb(30, 34, 40)));
         let mut rgba = solid(w, h, Rgb(30, 34, 40));
         for letter in 0..60 {
-            paint(&mut rgba, w, 980 + letter * 10, 1200, 3, 20, Rgb(240, 240, 240));
+            paint(
+                &mut rgba,
+                w,
+                980 + letter * 10,
+                1200,
+                3,
+                20,
+                Rgb(240, 240, 240),
+            );
         }
         let after = frame(w, h, rgba);
 

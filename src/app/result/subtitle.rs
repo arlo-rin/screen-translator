@@ -11,8 +11,7 @@
 use std::sync::Arc;
 
 use egui::{
-    Color32, FontId, Galley, Pos2, Rect, Sense, Vec2, ViewportBuilder, ViewportCommand,
-    ViewportId,
+    Color32, FontId, Galley, Pos2, Rect, Sense, Vec2, ViewportBuilder, ViewportCommand, ViewportId,
 };
 
 use super::{chrome, ResultAction, ResultUi, Stage};
@@ -21,7 +20,7 @@ use crate::features::capture::native;
 use crate::ui::theme::wash;
 use crate::ui::{icons, Theme};
 
-pub const TITLE: &str = "Sakura subtitle";
+pub const TITLE: &str = "Screen Translator subtitle";
 
 const RADIUS: f32 = 10.0;
 const PAD: Vec2 = Vec2::new(18.0, 11.0);
@@ -128,6 +127,7 @@ impl ResultUi {
                         rounded: Some(RADIUS),
                         hidden_from_capture: false,
                         translucent: true,
+                        ..Default::default()
                     },
                 );
                 native::reveal(ctx, self.frames);
@@ -140,11 +140,7 @@ impl ResultUi {
                     let mut painter = ui.painter().clone();
                     painter.set_opacity(presence);
 
-                    painter.rect_filled(
-                        screen,
-                        RADIUS,
-                        wash(10, 10, 14, (opacity * 255.0) as u8),
-                    );
+                    painter.rect_filled(screen, RADIUS, wash(10, 10, 14, (opacity * 255.0) as u8));
 
                     let centre_x = screen.center().x + content.lead / 2.0;
                     let mut y = screen.min.y + PAD.y;

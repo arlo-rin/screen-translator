@@ -177,10 +177,8 @@ mod tests {
     use std::io::Write;
 
     fn script_at(name: &str) -> (Script, PathBuf) {
-        let path = std::env::temp_dir().join(format!(
-            "sakura-script-{}-{name}.txt",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("sakura-script-{}-{name}.txt", std::process::id()));
         let _ = std::fs::remove_file(&path);
         (
             Script {
@@ -205,7 +203,10 @@ mod tests {
         let (mut script, path) = script_at("once");
         append(&path, "capture region\nselect 1,2,3,4\n");
         assert_eq!(script.new_lines(), vec!["capture region", "select 1,2,3,4"]);
-        assert!(script.new_lines().is_empty(), "the same lines came back twice");
+        assert!(
+            script.new_lines().is_empty(),
+            "the same lines came back twice"
+        );
 
         append(&path, "hide\n");
         assert_eq!(script.new_lines(), vec!["hide"]);

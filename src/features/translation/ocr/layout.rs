@@ -119,8 +119,32 @@ const JOINERS: &[char] = &['\'', '’', '-', '‐', '‑', '.', ',', ':', '/', '
 fn is_odd(c: char) -> bool {
     matches!(
         c,
-        '•' | '·' | '¦' | '|' | '\\' | '^' | '_' | '`' | '´' | '¨' | '¬' | '¯' | '¤' | '§' | '¶'
-            | '¢' | '‚' | '†' | '‡' | '◦' | '▪' | '■' | '□' | '●' | '○' | '~' | '='
+        '•' | '·'
+            | '¦'
+            | '|'
+            | '\\'
+            | '^'
+            | '_'
+            | '`'
+            | '´'
+            | '¨'
+            | '¬'
+            | '¯'
+            | '¤'
+            | '§'
+            | '¶'
+            | '¢'
+            | '‚'
+            | '†'
+            | '‡'
+            | '◦'
+            | '▪'
+            | '■'
+            | '□'
+            | '●'
+            | '○'
+            | '~'
+            | '='
     )
 }
 
@@ -172,7 +196,9 @@ fn well_cased(chars: &[char]) -> bool {
     if upper == 0 || lower == 0 {
         return true;
     }
-    let inside: Vec<usize> = (1..chars.len()).filter(|i| chars[*i].is_uppercase()).collect();
+    let inside: Vec<usize> = (1..chars.len())
+        .filter(|i| chars[*i].is_uppercase())
+        .collect();
     match inside.as_slice() {
         [] => true,
         [at] => chars.len() - at > 2 && chars[at + 1..].iter().all(|c| c.is_lowercase()),
@@ -310,7 +336,8 @@ fn tidy(line: &WordLine) -> WordLine {
                         && i + 1 < chars.len()
                         && chars[i - 1].is_alphanumeric()
                         && chars[i + 1].is_alphanumeric();
-                    if between && matches!(c, '«' | '»' | '„' | '“' | '”' | '‹' | '›' | '"') {
+                    if between && matches!(c, '«' | '»' | '„' | '“' | '”' | '‹' | '›' | '"')
+                    {
                         ' '
                     } else {
                         *c
@@ -544,8 +571,14 @@ fn full_height(text: &str, ink: f32) -> f32 {
             cased |= c.is_uppercase();
         } else if c.is_lowercase() {
             cased = true;
-            rises |= matches!(c, 'b' | 'd' | 'f' | 'h' | 'i' | 'j' | 'k' | 'l' | 't' | 'б' | 'ё' | 'й');
-            hangs |= matches!(c, 'g' | 'j' | 'p' | 'q' | 'y' | 'р' | 'у' | 'ф' | 'д' | 'ц' | 'щ');
+            rises |= matches!(
+                c,
+                'b' | 'd' | 'f' | 'h' | 'i' | 'j' | 'k' | 'l' | 't' | 'б' | 'ё' | 'й'
+            );
+            hangs |= matches!(
+                c,
+                'g' | 'j' | 'p' | 'q' | 'y' | 'р' | 'у' | 'ф' | 'д' | 'ц' | 'щ'
+            );
         } else if matches!(c, '(' | ')' | '[' | ']' | '{' | '}' | '/' | '|') {
             rises = true;
             hangs = true;
@@ -588,7 +621,10 @@ impl Row {
 
     /// Set in capitals throughout.
     fn shouts(&self) -> bool {
-        let mut cased = self.text.chars().filter(|c| c.is_uppercase() || c.is_lowercase());
+        let mut cased = self
+            .text
+            .chars()
+            .filter(|c| c.is_uppercase() || c.is_lowercase());
         cased.clone().count() >= 2 && cased.all(char::is_uppercase)
     }
 
@@ -634,10 +670,10 @@ impl Row {
 /// conjunctions. A caption's second line may begin with one; an entry of a
 /// menu does not.
 const JOINING: &[&str] = &[
-    "of", "to", "and", "or", "with", "for", "from", "in", "on", "at", "by", "than", "und",
-    "oder", "von", "mit", "für", "zu", "et", "ou", "de", "du", "des", "à", "avec", "pour", "y",
-    "del", "con", "para", "por", "di", "per", "em", "com", "и", "или", "в", "на", "с", "к", "о",
-    "для", "от", "по", "из",
+    "of", "to", "and", "or", "with", "for", "from", "in", "on", "at", "by", "than", "und", "oder",
+    "von", "mit", "für", "zu", "et", "ou", "de", "du", "des", "à", "avec", "pour", "y", "del",
+    "con", "para", "por", "di", "per", "em", "com", "и", "или", "в", "на", "с", "к", "о", "для",
+    "от", "по", "из",
 ];
 
 /// Words a sentence does not stop on, in the languages a game is most often
@@ -645,16 +681,14 @@ const JOINING: &[&str] = &[
 /// nothing else has settled whether a line carries on.
 const UNFINISHED: &[&str] = &[
     // English
-    "a", "an", "the", "of", "to", "in", "on", "at", "by", "for", "with", "from", "and", "or",
-    "but", "that", "which", "who", "is", "are", "was", "were", "be", "as", "if", "your", "my",
-    "his", "her", "their", "our", "its", "this", "these", "those", "not", "will", "can",
+    "a", "an", "the", "of", "to", "in", "on", "at", "by", "for", "with", "from", "and", "or", "but",
+    "that", "which", "who", "is", "are", "was", "were", "be", "as", "if", "your", "my", "his",
+    "her", "their", "our", "its", "this", "these", "those", "not", "will", "can",
     // German
     "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "und", "oder", "zu", "im",
-    "mit", "von", "für", "auf", "ist", "sind", "dass",
-    // French
+    "mit", "von", "für", "auf", "ist", "sind", "dass", // French
     "le", "la", "les", "un", "une", "du", "de", "et", "ou", "à", "en", "dans", "pour", "avec",
-    "sur", "que", "qui", "est",
-    // Spanish, Italian, Portuguese
+    "sur", "que", "qui", "est", // Spanish, Italian, Portuguese
     "el", "los", "las", "una", "del", "y", "o", "con", "por", "para", "es", "il", "lo", "gli",
     "di", "e", "per", "che", "è", "os", "as", "um", "uma", "do", "da", "em", "com", "é",
     // Polish, Russian, Ukrainian
@@ -729,8 +763,7 @@ fn reads_on(so_far: &[Row], next: &Row) -> bool {
     if !first.is_uppercase() && !first.is_numeric() {
         // Writing with no capitals to go by: a line that is long, and as
         // long as any line of its paragraph, ran out of room.
-        return last.text.chars().count() >= 8
-            && last.rect.w >= widest.max(next.rect.w) * 0.85;
+        return last.text.chars().count() >= 8 && last.rect.w >= widest.max(next.rect.w) * 0.85;
     }
     if last.shouts() != next.shouts() {
         return false;
@@ -787,7 +820,12 @@ fn carries_over(so_far: &[Row], next: &Row) -> bool {
 /// Puts lines together into paragraphs, in reading order.
 pub fn blocks(lines: &[WordLine], capture_width: f32) -> Vec<TextBlock> {
     let mut rows: Vec<Row> = lines.iter().filter_map(Row::of).collect();
-    rows.sort_by(|a, b| a.rect.y.total_cmp(&b.rect.y).then(a.rect.x.total_cmp(&b.rect.x)));
+    rows.sort_by(|a, b| {
+        a.rect
+            .y
+            .total_cmp(&b.rect.y)
+            .then(a.rect.x.total_cmp(&b.rect.x))
+    });
 
     let mut paragraphs: Vec<Vec<Row>> = Vec::new();
     for row in rows {
@@ -993,7 +1031,13 @@ mod tests {
 
     #[test]
     fn a_whole_line_is_kept_over_the_pieces_another_reading_made_of_it() {
-        let whole = vec![boxed(389.0, 200.0, 424.0, 26.0, "I told you not to come back here.")];
+        let whole = vec![boxed(
+            389.0,
+            200.0,
+            424.0,
+            26.0,
+            "I told you not to come back here.",
+        )];
         let pieces = vec![
             boxed(404.0, 199.0, 32.0, 21.0, "tol"),
             boxed(606.0, 199.0, 207.0, 21.0, "come back here."),
@@ -1039,7 +1083,9 @@ mod tests {
             .collect();
         assert_eq!(doubtful, ["Furlfriend", "Witt"]);
         // Type of an ordinary size is believed on one reading.
-        assert!(kept.iter().any(|line| line.line.text() == "CONTINUE" && !line.confirmed));
+        assert!(kept
+            .iter()
+            .any(|line| line.line.text() == "CONTINUE" && !line.confirmed));
     }
 
     #[test]
@@ -1067,7 +1113,12 @@ mod tests {
 
     #[test]
     fn a_letter_read_in_two_halves_is_put_back_together() {
-        let lines = merged(vec![vec![line(484.0, 310.0, 33.0, "I<eep close and stay quiet.")]]);
+        let lines = merged(vec![vec![line(
+            484.0,
+            310.0,
+            33.0,
+            "I<eep close and stay quiet.",
+        )]]);
         assert_eq!(lines[0].text(), "Keep close and stay quiet.");
     }
 
@@ -1085,10 +1136,20 @@ mod tests {
 
     #[test]
     fn a_speck_read_as_a_quotation_mark_between_two_words_parts_them() {
-        let lines = merged(vec![vec![line(458.0, 1753.0, 29.0, "We have to find another«way across.")]]);
+        let lines = merged(vec![vec![line(
+            458.0,
+            1753.0,
+            29.0,
+            "We have to find another«way across.",
+        )]]);
         assert_eq!(lines[0].text(), "We have to find another way across.");
         // Around a word, it is what it looks like.
-        let quoted = merged(vec![vec![line(0.0, 0.0, 20.0, "Он сказал «привет» и ушёл")]]);
+        let quoted = merged(vec![vec![line(
+            0.0,
+            0.0,
+            20.0,
+            "Он сказал «привет» и ушёл",
+        )]]);
         assert_eq!(quoted[0].text(), "Он сказал «привет» и ушёл");
     }
 
@@ -1096,8 +1157,14 @@ mod tests {
     fn a_label_and_a_value_at_the_ends_of_a_row_are_two_pieces() {
         let row = WordLine {
             words: vec![
-                Word { rect: PxRect::new(84.0, 116.0, 87.0, 14.0), text: "Resolution".into() },
-                Word { rect: PxRect::new(819.0, 117.0, 98.0, 13.0), text: "High".into() },
+                Word {
+                    rect: PxRect::new(84.0, 116.0, 87.0, 14.0),
+                    text: "Resolution".into(),
+                },
+                Word {
+                    rect: PxRect::new(819.0, 117.0, 98.0, 13.0),
+                    text: "High".into(),
+                },
             ],
         };
         let lines = merged(vec![vec![row]]);
@@ -1136,15 +1203,26 @@ mod tests {
     fn a_sentence_wrapped_over_two_lines_is_one_paragraph() {
         let found = blocks(
             &[
-                line(45.0, 158.0, 24.0, "Speak to the old merchant in the village"),
+                line(
+                    45.0,
+                    158.0,
+                    24.0,
+                    "Speak to the old merchant in the village",
+                ),
                 line(46.0, 198.0, 24.0, "before nightfall."),
             ],
             900.0,
         );
-        assert_eq!(texts(&found), ["Speak to the old merchant in the village before nightfall."]);
+        assert_eq!(
+            texts(&found),
+            ["Speak to the old merchant in the village before nightfall."]
+        );
         assert_eq!(found[0].lines, 2);
         assert_eq!(found[0].pitch, 40.0);
-        assert_eq!(found[0].sample.text, "Speak to the old merchant in the village");
+        assert_eq!(
+            found[0].sample.text,
+            "Speak to the old merchant in the village"
+        );
     }
 
     #[test]
@@ -1170,13 +1248,21 @@ mod tests {
         let found = blocks(
             &[
                 line(44.0, 121.0, 22.0, "Save your progress now."),
-                line(44.0, 161.0, 22.0, "Load a game you saved before from the disk."),
+                line(
+                    44.0,
+                    161.0,
+                    22.0,
+                    "Load a game you saved before from the disk.",
+                ),
             ],
             900.0,
         );
         assert_eq!(
             texts(&found),
-            ["Save your progress now.", "Load a game you saved before from the disk."]
+            [
+                "Save your progress now.",
+                "Load a game you saved before from the disk."
+            ]
         );
         // A word or two and a full stop is a button, not prose.
         let buttons = blocks(
@@ -1201,7 +1287,10 @@ mod tests {
             ],
             1100.0,
         );
-        assert_eq!(texts(&found), ["Rent a room", "Ask about the road north", "Leave"]);
+        assert_eq!(
+            texts(&found),
+            ["Rent a room", "Ask about the road north", "Leave"]
+        );
 
         let shouted = blocks(
             &[
@@ -1248,7 +1337,10 @@ mod tests {
             ],
             900.0,
         );
-        assert_eq!(texts(&found), ["Yesterday the council decided that Aloy must leave the valley."]);
+        assert_eq!(
+            texts(&found),
+            ["Yesterday the council decided that Aloy must leave the valley."]
+        );
 
         let shouted = blocks(
             &[
@@ -1257,7 +1349,10 @@ mod tests {
             ],
             900.0,
         );
-        assert_eq!(texts(&shouted), ["PRESS AND HOLD THE BUTTON TO CHARGE YOUR ATTACK"]);
+        assert_eq!(
+            texts(&shouted),
+            ["PRESS AND HOLD THE BUTTON TO CHARGE YOUR ATTACK"]
+        );
     }
 
     #[test]
@@ -1362,7 +1457,10 @@ mod tests {
             ],
             1000.0,
         );
-        assert_eq!(texts(&found), ["Resolution", "Disabled", "Texture quality", "Ultra"]);
+        assert_eq!(
+            texts(&found),
+            ["Resolution", "Disabled", "Texture quality", "Ultra"]
+        );
         // And the values hang from their right edge.
         assert_eq!(found[1].align, Align::Right);
         assert_eq!(found[3].align, Align::Right);
@@ -1373,13 +1471,22 @@ mod tests {
     fn japanese_wrapped_at_the_edge_of_its_box_is_one_paragraph() {
         let found = blocks(
             &[
-                boxed(40.0, 100.0, 520.0, 26.0, "峠は春まで閉ざされているので、ここで"),
+                boxed(
+                    40.0,
+                    100.0,
+                    520.0,
+                    26.0,
+                    "峠は春まで閉ざされているので、ここで",
+                ),
                 boxed(40.0, 140.0, 300.0, 26.0, "待つしかありません。"),
             ],
             900.0,
         );
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].text, "峠は春まで閉ざされているので、ここで待つしかありません。");
+        assert_eq!(
+            found[0].text,
+            "峠は春まで閉ざされているので、ここで待つしかありません。"
+        );
     }
 
     #[test]

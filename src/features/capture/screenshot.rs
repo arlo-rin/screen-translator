@@ -316,7 +316,9 @@ fn grab(area: Bounds) -> Result<RawCapture, AppError> {
     unsafe {
         let screen_dc = GetDC(HWND(std::ptr::null_mut()));
         if screen_dc.0.is_null() {
-            return Err(AppError::Other(t("GetDC returned no screen context").into()));
+            return Err(AppError::Other(
+                t("GetDC returned no screen context").into(),
+            ));
         }
 
         let mem_dc = CreateCompatibleDC(screen_dc);

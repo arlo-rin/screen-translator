@@ -14,18 +14,21 @@
 [![Platform: Windows | macOS | Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)](https://github.com/arlo-rin/screen-translator/releases)
 [![Built with Rust](https://img.shields.io/badge/Built%20with-Rust-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 
-[**核心特性**](#-核心特性) ·
-[**快速上手**](#-快速上手) ·
-[**快捷键与命令行**](#-快捷键与命令行) ·
-[**翻译引擎与文字识别**](#-翻译引擎与文字识别) ·
-[**从源码构建**](#-从源码构建) ·
-[**致谢与协议**](#-致谢与协议)
+[**核心特性**](#核心特性) ·
+[**快速上手**](#快速上手) ·
+[**快捷键与命令行**](#快捷键与命令行) ·
+[**翻译引擎与文字识别**](#翻译引擎与文字识别) ·
+[**系统环境要求**](#系统环境要求) ·
+[**从源码构建**](#从源码构建) ·
+[**版本与自动发布**](#版本与自动发布) ·
+[**免责声明**](#免责声明) ·
+[**致谢与协议**](#致谢与协议)
 
 </div>
 
 ---
 
-## ✨ 核心特性
+## 核心特性
 
 - **五种译文展示方式**
   - **覆盖在原文上** *（默认）* —— 直接在原文字位置覆盖译文，自动匹配字号与背景色调，不抢占游戏或应用焦点。
@@ -44,7 +47,7 @@
 
 ---
 
-## 🚀 快速上手
+## 快速上手
 
 前往 [**Releases**](https://github.com/arlo-rin/screen-translator/releases) 下载对应平台的可执行文件（绿色免安装，直接运行）：
 
@@ -60,7 +63,7 @@
 
 ---
 
-## ⌨️ 快捷键与命令行
+## 快捷键与命令行
 
 ### 全局快捷键
 
@@ -100,7 +103,7 @@ screen-translator --help                  # 查看帮助信息
 
 ---
 
-## 🌐 翻译引擎与文字识别
+## 翻译引擎与文字识别
 
 ### 翻译引擎
 
@@ -122,7 +125,7 @@ Windows 下所有 API 密钥均通过 DPAPI 加密后写入配置。
 
 ---
 
-## 📋 系统环境要求
+## 系统环境要求
 
 <details>
 <summary><b>Windows（10 / 11 x64）</b></summary>
@@ -156,7 +159,7 @@ Windows 下所有 API 密钥均通过 DPAPI 加密后写入配置。
 
 ---
 
-## 🛠️ 从源码构建
+## 从源码构建
 
 ### 环境依赖
 
@@ -182,19 +185,19 @@ cargo test -- --ignored # 运行依赖真实屏幕的捕获测试
 
 ---
 
-## 🔖 版本与自动发布
+## 版本与自动发布
 
 `Cargo.toml` 为版本号的唯一权威来源。推送至 `main` 分支会触发 `.github/workflows/release.yml`，自动构建 Windows、macOS Universal 与 Linux 三端产物并发布对应 `vX.Y.Z` Release。
 
 ---
 
-## ⚠️ 免责声明
+## 免责声明
 
 本软件按**“现状”（AS IS）**提供，不作任何明示或默示担保。第三方翻译、OCR 与 AI 服务均受各自服务条款及计费规则约束，非官方接口可能随时失效或变更。
 
 ---
 
-## 👤 致谢与协议
+## 致谢与协议
 
 - 原项目作者：[@クシススミタ](https://github.com/Kushisusumita)
 - 定制版维护：[@arlo-rin](https://github.com/arlo-rin)

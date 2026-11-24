@@ -14,18 +14,21 @@
 [![Platform: Windows | macOS | Linux](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-555555)](https://github.com/arlo-rin/screen-translator/releases)
 [![Built with Rust](https://img.shields.io/badge/Built%20with-Rust-CE422B?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 
-[**Highlights**](#-highlights) ·
-[**Quick Start**](#-quick-start) ·
-[**Hotkeys & CLI**](#-hotkeys--cli) ·
-[**Translation & OCR**](#-translation--ocr) ·
-[**Building**](#-building-from-source) ·
-[**Credits & License**](#-credits--license)
+[**Highlights**](#highlights) ·
+[**Quick Start**](#quick-start) ·
+[**Hotkeys & CLI**](#hotkeys-and-cli) ·
+[**Translation & OCR**](#translation-and-ocr) ·
+[**Requirements**](#requirements) ·
+[**Building**](#building) ·
+[**Versioning & CI**](#versioning-and-ci) ·
+[**Disclaimer**](#disclaimer) ·
+[**Credits & License**](#credits-and-license)
 
 </div>
 
 ---
 
-## ✨ Highlights
+## Highlights
 
 - **Five ways to view translations**
   - **Over the original** *(default)* — paints the translation directly over the captured text, matching size and surface colour without stealing focus from your game or app.
@@ -44,7 +47,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 Download the standalone binary for your platform from [**Releases**](https://github.com/arlo-rin/screen-translator/releases) (no installer required):
 
@@ -60,7 +63,7 @@ Download the standalone binary for your platform from [**Releases**](https://git
 
 ---
 
-## ⌨️ Hotkeys & CLI
+## Hotkeys and CLI
 
 ### Global Hotkeys
 
@@ -100,7 +103,7 @@ screen-translator --help                  # Show CLI help
 
 ---
 
-## 🌐 Translation & OCR
+## Translation and OCR
 
 ### Engines
 
@@ -122,7 +125,7 @@ On Windows, API keys and secrets are sealed at rest using Windows DPAPI.
 
 ---
 
-## 📋 Platform Requirements
+## Requirements
 
 <details>
 <summary><b>Windows (10 / 11 x64)</b></summary>
@@ -156,7 +159,7 @@ Optional desktop services used when available:
 
 ---
 
-## 🛠️ Building from Source
+## Building
 
 ### Prerequisites
 
@@ -182,19 +185,19 @@ cargo test -- --ignored # Run live-display capture tests
 
 ---
 
-## 🔖 Versioning & CI
+## Versioning and CI
 
 `Cargo.toml` is the single source of truth for the version. Pushing a new version on `main` triggers `.github/workflows/release.yml` to build Windows, macOS Universal, and Linux binaries and publish tag `vX.Y.Z`.
 
 ---
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 This software is provided **"as is"**, without warranty of any kind. Third-party translation, OCR, and AI services are subject to their respective Terms of Service and billing policies, and unofficial endpoints may change or stop working without notice.
 
 ---
 
-## 👤 Credits & License
+## Credits and License
 
 - Original author: [@クシススミタ](https://github.com/Kushisusumita)
 - Custom fork maintainer: [@arlo-rin](https://github.com/arlo-rin)

@@ -28,7 +28,7 @@
 
 ---
 
-## Highlights
+## <a id="highlights"></a>✨ Highlights
 
 - **Five ways to view translations**
   - **Over the original** *(default)* — paints the translation directly over the captured text, matching size and surface colour without stealing focus from your game or app.
@@ -47,7 +47,7 @@
 
 ---
 
-## Quick Start
+## <a id="quick-start"></a>🚀 Quick Start
 
 Download the standalone binary for your platform from [**Releases**](https://github.com/arlo-rin/screen-translator/releases) (no installer required):
 
@@ -63,7 +63,7 @@ Download the standalone binary for your platform from [**Releases**](https://git
 
 ---
 
-## Hotkeys and CLI
+## <a id="hotkeys-and-cli"></a>⌨️ Hotkeys and CLI
 
 ### Global Hotkeys
 
@@ -103,7 +103,7 @@ screen-translator --help                  # Show CLI help
 
 ---
 
-## Translation and OCR
+## <a id="translation-and-ocr"></a>🌐 Translation and OCR
 
 ### Engines
 
@@ -125,7 +125,7 @@ On Windows, API keys and secrets are sealed at rest using Windows DPAPI.
 
 ---
 
-## Requirements
+## <a id="requirements"></a>📋 Requirements
 
 <details>
 <summary><b>Windows (10 / 11 x64)</b></summary>
@@ -159,7 +159,7 @@ Optional desktop services used when available:
 
 ---
 
-## Building
+## <a id="building"></a>🛠️ Building
 
 ### Prerequisites
 
@@ -185,19 +185,19 @@ cargo test -- --ignored # Run live-display capture tests
 
 ---
 
-## Versioning and CI
+## <a id="versioning-and-ci"></a>🔖 Versioning and CI
 
 `Cargo.toml` is the single source of truth for the version. Pushing a new version on `main` triggers `.github/workflows/release.yml` to build Windows, macOS Universal, and Linux binaries and publish tag `vX.Y.Z`.
 
 ---
 
-## Disclaimer
+## <a id="disclaimer"></a>⚠️ Disclaimer
 
 This software is provided **"as is"**, without warranty of any kind. Third-party translation, OCR, and AI services are subject to their respective Terms of Service and billing policies, and unofficial endpoints may change or stop working without notice.
 
 ---
 
-## Credits and License
+## <a id="credits-and-license"></a>👤 Credits and License
 
 - Original author: [@クシススミタ](https://github.com/Kushisusumita)
 - Custom fork maintainer: [@arlo-rin](https://github.com/arlo-rin)

@@ -24,15 +24,18 @@ pub const TILE_RGB: [u8; 3] = TILE_PRIMARY_RGB;
 pub const GLYPH_RGB: [u8; 3] = ON_PRIMARY_RGB;
 
 /// Side margin of the two-tile lockup, as a fraction of the canvas.
-pub const TILE_MARGIN: f32 = 0.06;
+pub const TILE_MARGIN: f32 = 0.055;
 /// Unscaled tile side, as a fraction of the canvas, before fitting.
 const TILE_SIDE: f32 = 0.64;
 /// How much the tiles overlap, as a fraction of the canvas, before fitting.
-const TILE_OVERLAP: f32 = 0.20;
+/// Kept just above `TILE_CORNER * TILE_SIDE` so the left tile's flat top and
+/// bottom edges meet the right tile's rounded corners without a dip while
+/// leaving generous horizontal room for `A`.
+const TILE_OVERLAP: f32 = 0.14;
 /// Corner radius, as a fraction of the tile side.
-pub const TILE_CORNER: f32 = 0.24;
+pub const TILE_CORNER: f32 = 0.215;
 /// Tight corner at the smallest sizes so the tiles do not become circles.
-pub const TILE_CORNER_SMALL: f32 = 0.22;
+pub const TILE_CORNER_SMALL: f32 = 0.20;
 
 /// How much of the canvas half-side the painted lockup reaches.
 pub fn extent() -> f32 {
@@ -72,57 +75,60 @@ impl TileBox {
 }
 
 /// Layout of the two tiles in unit-canvas space, with pixel snapping on
-/// sizes 32 px and under.
+/// sizes 32 px and under so both tiles share the exact same snapped side.
 pub fn overlap_geometry(size: u32) -> (TileBox, TileBox) {
     let total_w = 2.0 * TILE_SIDE - TILE_OVERLAP;
     let fit = (1.0 - 2.0 * TILE_MARGIN) / total_w;
     let side = TILE_SIDE * fit;
     let overlap = TILE_OVERLAP * fit;
+
+    if size > 0 && size <= 32 {
+        let s = size as f32;
+        let side_px = (side * s).round().clamp(4.0, s);
+        let overlap_px = (overlap * s).round().clamp(1.0, (side_px * 0.35).floor().max(1.0));
+        let total_px = (2.0 * side_px - overlap_px).min(s);
+        let x0_px = ((s - total_px) * 0.5).floor();
+        let y0_px = ((s - side_px) * 0.5).floor();
+        let rx0_px = x0_px + total_px - side_px;
+        let left = TileBox {
+            x0: x0_px / s,
+            y0: y0_px / s,
+            x1: (x0_px + side_px) / s,
+            y1: (y0_px + side_px) / s,
+        };
+        let right = TileBox {
+            x0: rx0_px / s,
+            y0: y0_px / s,
+            x1: (rx0_px + side_px) / s,
+            y1: (y0_px + side_px) / s,
+        };
+        return (left, right);
+    }
+
     let x0 = TILE_MARGIN;
     let y0 = (1.0 - side) / 2.0;
-    let mut left = TileBox {
+    let left = TileBox {
         x0,
         y0,
         x1: x0 + side,
         y1: y0 + side,
     };
-    let mut right = TileBox {
+    let right = TileBox {
         x0: x0 + side - overlap,
         y0,
         x1: x0 + side - overlap + side,
         y1: y0 + side,
     };
-    if size > 0 && size <= 32 {
-        let snap = |v: f32| (v * size as f32).round() / size as f32;
-        left = TileBox {
-            x0: snap(left.x0),
-            y0: snap(left.y0),
-            x1: snap(left.x1),
-            y1: snap(left.y1),
-        };
-        right = TileBox {
-            x0: snap(right.x0),
-            y0: snap(right.y0),
-            x1: snap(right.x1),
-            y1: snap(right.y1),
-        };
-        let ls = left.width().min(left.height());
-        let rs = right.width().min(right.height());
-        left.x1 = left.x0 + ls;
-        left.y1 = left.y0 + ls;
-        right.x1 = right.x0 + rs;
-        right.y1 = right.y0 + rs;
-    }
     (left, right)
 }
 
 pub fn glyph_pad(size: u32) -> f32 {
     if size <= 16 {
-        0.10
-    } else if size <= 24 {
         0.12
+    } else if size <= 24 {
+        0.14
     } else {
-        0.15
+        0.18
     }
 }
 
@@ -511,31 +517,18 @@ pub fn glyph_wen(bold: bool) -> GlyphContours {
     }
 }
 
-/// Maps a unit-square glyph into `box`, with `pad` of the box left as margin.
-/// `u_0`/`u_1` select a horizontal slice of the tile so A stays left and 文
-/// stays right of the overlap.
-pub fn map_glyph(
+/// Maps a unit-square glyph centred inside `box` at an explicit `side` so both
+/// glyphs share identical cap height and baseline.
+fn map_glyph_centered(
     glyph: GlyphContours,
-    tile: TileBox,
-    pad: f32,
-    u_0: f32,
-    u_1: f32,
+    bx0: f32,
+    by0: f32,
+    bx1: f32,
+    by1: f32,
+    side: f32,
 ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
-    let x0 = tile.x0 + tile.width() * u_0;
-    let x1 = tile.x0 + tile.width() * u_1;
-    let y0 = tile.y0;
-    let y1 = tile.y1;
-    let w = x1 - x0;
-    let h = y1 - y0;
-    let ix0 = x0 + w * pad;
-    let iy0 = y0 + h * pad;
-    let ix1 = x1 - w * pad;
-    let iy1 = y1 - h * pad;
-    let iw = ix1 - ix0;
-    let ih = iy1 - iy0;
-    let side = iw.min(ih);
-    let ox = ix0 + (iw - side) * 0.5;
-    let oy = iy0 + (ih - side) * 0.5;
+    let ox = (bx0 + bx1 - side) * 0.5;
+    let oy = (by0 + by1 - side) * 0.5;
     let map = |pts: &[[f32; 2]]| -> Vec<[f32; 2]> {
         pts.iter()
             .map(|p| [ox + p[0] * side, oy + p[1] * side])
@@ -553,7 +546,7 @@ pub fn rasterise(size: u32) -> Vec<u8> {
 /// only appears while the icon is breathing (`scale` below 1), so the
 /// monogram never tips on its side and a settled frame always looks like rest.
 pub fn rasterise_with(size: u32, turns: f32, scale: f32) -> Vec<u8> {
-    const SUB: u32 = 4;
+    let sub: u32 = if size <= 48 { 6 } else { 4 };
     let canvas = size as f32;
     let scale = scale.clamp(0.2, 1.0);
     let origin = canvas * (1.0 - scale) * 0.5;
@@ -570,8 +563,23 @@ pub fn rasterise_with(size: u32, turns: f32, scale: f32) -> Vec<u8> {
     let right = to_px(right_u);
     let pad = glyph_pad(size);
     let bold = use_bold_glyphs(size);
-    let (a_outer, a_hole) = map_glyph(glyph_a(bold), left, pad, 0.0, 0.84);
-    let (w_outer, w_hole) = map_glyph(glyph_wen(bold), right, pad, 0.16, 1.0);
+
+    // Centre `A` strictly within the visible portion of the left tile
+    // (`left.x0 .. right.x0`) and `文` within the full right tile (which sits
+    // completely on top), sharing one optical height so both align cleanly.
+    let visible_left_w = (right.x0 - left.x0).max(1.0);
+    let x_pad = if size <= 24 { 0.09 } else { 0.115 };
+    let glyph_side = (left.height() * (1.0 - 2.0 * pad)).min(visible_left_w * (1.0 - 2.0 * x_pad));
+    let (a_outer, a_hole) =
+        map_glyph_centered(glyph_a(bold), left.x0, left.y0, right.x0, left.y1, glyph_side);
+    let (w_outer, w_hole) = map_glyph_centered(
+        glyph_wen(bold),
+        right.x0,
+        right.y0,
+        right.x1,
+        right.y1,
+        glyph_side,
+    );
 
     let show_arc = scale < 0.995 && size >= 24;
     let cx = canvas * 0.5;
@@ -581,77 +589,53 @@ pub fn rasterise_with(size: u32, turns: f32, scale: f32) -> Vec<u8> {
     let arc_start = turns * std::f32::consts::TAU;
     let arc_sweep = std::f32::consts::TAU * 0.62;
 
+    let left_r = left.corner_radius(size) * scale;
+    let right_r = right.corner_radius(size) * scale;
+
     let mut out = vec![0u8; (size as usize) * (size as usize) * 4];
-    let total = (SUB * SUB) as f32;
+    let total = (sub * sub) as f32;
 
     for py in 0..size {
         for px in 0..size {
-            let mut prim = 0u32;
-            let mut cont = 0u32;
-            let mut a_hits = 0u32;
-            let mut w_hits = 0u32;
-            let mut arc_hits = 0u32;
-            for sy in 0..SUB {
-                for sx in 0..SUB {
-                    let x = px as f32 + (sx as f32 + 0.5) / SUB as f32;
-                    let y = py as f32 + (sy as f32 + 0.5) / SUB as f32;
-                    if show_arc && on_arc(x, y, cx, cy, arc_r, arc_half, arc_start, arc_sweep) {
-                        arc_hits += 1;
-                    }
-                    let in_right = in_rounded_rect(
-                        x,
-                        y,
-                        right.x0,
-                        right.y0,
-                        right.x1,
-                        right.y1,
-                        right.corner_radius(size) * scale,
-                    );
-                    let in_left = in_rounded_rect(
-                        x,
-                        y,
-                        left.x0,
-                        left.y0,
-                        left.x1,
-                        left.y1,
-                        left.corner_radius(size) * scale,
-                    );
-                    if in_right {
-                        cont += 1;
+            let mut rgb = [0.0_f32; 3];
+            let mut covered = 0u32;
+            for sy in 0..sub {
+                for sx in 0..sub {
+                    let x = px as f32 + (sx as f32 + 0.5) / sub as f32;
+                    let y = py as f32 + (sy as f32 + 0.5) / sub as f32;
+                    let sample = if in_rounded_rect(x, y, right.x0, right.y0, right.x1, right.y1, right_r) {
                         if inside_glyph(&w_outer, &w_hole, x, y) {
-                            w_hits += 1;
+                            Some(ON_CONTAINER_RGB)
+                        } else {
+                            Some(TILE_CONTAINER_RGB)
                         }
-                    } else if in_left {
-                        prim += 1;
+                    } else if in_rounded_rect(x, y, left.x0, left.y0, left.x1, left.y1, left_r) {
                         if inside_glyph(&a_outer, &a_hole, x, y) {
-                            a_hits += 1;
+                            Some(ON_PRIMARY_RGB)
+                        } else {
+                            Some(TILE_PRIMARY_RGB)
                         }
+                    } else if show_arc && on_arc(x, y, cx, cy, arc_r, arc_half, arc_start, arc_sweep) {
+                        Some(TILE_PRIMARY_RGB)
+                    } else {
+                        None
+                    };
+                    if let Some(col) = sample {
+                        covered += 1;
+                        rgb[0] += col[0] as f32;
+                        rgb[1] += col[1] as f32;
+                        rgb[2] += col[2] as f32;
                     }
                 }
             }
 
-            let idx = ((py as usize) * (size as usize) + px as usize) * 4;
-            if cont > 0 {
-                let share = w_hits as f32 / cont as f32;
-                for c in 0..3 {
-                    let t = TILE_CONTAINER_RGB[c] as f32;
-                    let g = ON_CONTAINER_RGB[c] as f32;
-                    out[idx + c] = (t + (g - t) * share).round() as u8;
-                }
-                out[idx + 3] = ((cont as f32 / total) * 255.0).round() as u8;
-            } else if prim > 0 {
-                let share = a_hits as f32 / prim as f32;
-                for c in 0..3 {
-                    let t = TILE_PRIMARY_RGB[c] as f32;
-                    let g = ON_PRIMARY_RGB[c] as f32;
-                    out[idx + c] = (t + (g - t) * share).round() as u8;
-                }
-                out[idx + 3] = ((prim as f32 / total) * 255.0).round() as u8;
-            } else if arc_hits > 0 {
-                for c in 0..3 {
-                    out[idx + c] = TILE_PRIMARY_RGB[c];
-                }
-                out[idx + 3] = ((arc_hits as f32 / total) * 255.0).round() as u8;
+            if covered > 0 {
+                let idx = ((py as usize) * (size as usize) + px as usize) * 4;
+                let cov = covered as f32;
+                out[idx] = (rgb[0] / cov).round() as u8;
+                out[idx + 1] = (rgb[1] / cov).round() as u8;
+                out[idx + 2] = (rgb[2] / cov).round() as u8;
+                out[idx + 3] = ((cov / total) * 255.0).round() as u8;
             }
         }
     }
@@ -816,6 +800,75 @@ mod tests {
         assert!(
             w_min - a_max >= 1,
             "A and 文 touch: A max x={a_max}, 文 min x={w_min}"
+        );
+    }
+
+    #[test]
+    fn overlap_seam_stays_fully_opaque() {
+        // Previously pixels straddling the right tile's left edge dropped the
+        // left tile's subsamples and became semi-transparent, showing a dark
+        // or light crack along the seam.
+        let size = 128;
+        let buf = rasterise(size);
+        let (_, right) = overlap_geometry(size);
+        let seam_x = (right.x0 * size as f32).round() as u32;
+        let y_start = ((right.y0 + right.height() * 0.25) * size as f32).round() as u32;
+        let y_end = ((right.y0 + right.height() * 0.75) * size as f32).round() as u32;
+        for y in y_start..=y_end {
+            for dx in -1_i32..=1 {
+                let x = (seam_x as i32 + dx) as u32;
+                let a = pixel(&buf, size, x, y)[3];
+                assert_eq!(
+                    a, 255,
+                    "seam pixel ({x},{y}) is semi-transparent (alpha={a})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn glyphs_are_symmetrically_centred_in_their_visible_tiles() {
+        let size = 256;
+        let buf = rasterise(size);
+        let (left, right) = overlap_geometry(size);
+        let mut a_min = size;
+        let mut a_max = 0;
+        let mut w_min = size;
+        let mut w_max = 0;
+        for y in 0..size {
+            for x in 0..size {
+                let px = pixel(&buf, size, x, y);
+                if px[3] < 200 {
+                    continue;
+                }
+                if close_rgb(px, ON_PRIMARY_RGB, 30) {
+                    a_min = a_min.min(x);
+                    a_max = a_max.max(x);
+                }
+                if close_rgb(px, ON_CONTAINER_RGB, 30) {
+                    w_min = w_min.min(x);
+                    w_max = w_max.max(x);
+                }
+            }
+        }
+        let lx0 = left.x0 * size as f32;
+        let rx0 = right.x0 * size as f32;
+        let rx1 = right.x1 * size as f32;
+        let a_left_margin = a_min as f32 - lx0;
+        let a_right_margin = rx0 - a_max as f32;
+        assert!(
+            a_right_margin >= 10.0,
+            "A sits too close to the right tile: right margin = {a_right_margin:.1}px"
+        );
+        assert!(
+            (a_left_margin - a_right_margin).abs() <= 2.5,
+            "A is off-centre in visible left tile: left={a_left_margin:.1}, right={a_right_margin:.1}"
+        );
+        let w_left_margin = w_min as f32 - rx0;
+        let w_right_margin = rx1 - w_max as f32;
+        assert!(
+            (w_left_margin - w_right_margin).abs() <= 2.5,
+            "文 is off-centre in right tile: left={w_left_margin:.1}, right={w_right_margin:.1}"
         );
     }
 

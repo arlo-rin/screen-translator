@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/icon.png" width="112" alt="Screen Translator">
+<img src="assets/icon.svg" width="112" alt="Screen Translator">
 
 # Screen Translator
 

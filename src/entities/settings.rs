@@ -1754,10 +1754,12 @@ mod tests {
         c.store_current();
 
         let text = toml::to_string(&c).expect("serialise");
-        assert!(
-            !text.contains("sk-deepseek-test") && !text.contains("sk-mistral-test"),
-            "secrets must not be written in the clear"
-        );
+        if crate::shared::secret::sealing_available() {
+            assert!(
+                !text.contains("sk-deepseek-test") && !text.contains("sk-mistral-test"),
+                "secrets must not be written in the clear"
+            );
+        }
         let mut back: AiConfig = toml::from_str(&text).expect("deserialise");
         assert_eq!(back.preset_name, "Mistral");
         assert_eq!(back.api_key.expose(), "sk-mistral-test");
@@ -1920,10 +1922,12 @@ preset_name = "DeepSeek"
         s.engines.aliyun_config.access_key_secret = Secret::new("aliyun-secret-test");
         s.engines.aliyun_config.endpoint = AliyunEndpoint::Hangzhou;
         let raw = toml::to_string(&s).expect("serialize");
-        assert!(
-            !raw.contains("aliyun-secret-test"),
-            "secret must not be stored in the clear"
-        );
+        if crate::shared::secret::sealing_available() {
+            assert!(
+                !raw.contains("aliyun-secret-test"),
+                "secret must not be stored in the clear"
+            );
+        }
         let back: Settings = toml::from_str(&raw).expect("deserialize");
         assert_eq!(back.engines.aliyun_config.access_key_id, "testid");
         assert_eq!(

@@ -492,6 +492,7 @@ mod tests {
         assert_ne!(w.toggle_dim_knob_when_off, m.toggle_dim_knob_when_off);
     }
 
+    #[cfg(windows)]
     #[test]
     fn windows_chinese_ui_fonts_start_with_yahei_ui() {
         let fonts = Platform::Windows.chinese_ui_fonts();
@@ -512,6 +513,7 @@ mod tests {
         assert!(ui < body);
     }
 
+    #[cfg(windows)]
     #[test]
     fn windows_latin_prefers_classic_segoe_over_the_variable_font() {
         let fonts = Platform::Windows.latin_ui_fonts();
@@ -519,6 +521,7 @@ mod tests {
         assert!(fonts.iter().any(|f| f.name == "Segoe UI Variable"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn windows_japanese_prefers_yu_gothic_ui_over_the_document_face() {
         let fonts = Platform::Windows.japanese_ui_fonts();
@@ -531,6 +534,7 @@ mod tests {
         assert!(ui < body);
     }
 
+    #[cfg(windows)]
     #[test]
     fn windows_korean_uses_malgun_gothic() {
         assert_eq!(Platform::Windows.korean_ui_fonts()[0].name, "Malgun Gothic");

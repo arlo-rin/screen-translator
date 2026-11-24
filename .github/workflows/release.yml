@@ -3,9 +3,8 @@ name: Release
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - '.github/workflows/release.yml'
+    paths:
+      - 'Cargo.toml'
 
 permissions:
   contents: write
